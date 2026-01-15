@@ -2,6 +2,8 @@
 
 **AI-Powered Documentary Creation Studio**
 
+Transform your documentary scripts into professional video productions.
+
 DocuCraft is a professional web application that streamlines documentary video production using Google's Gemini AI. Transform scripts into visual storyboards, generate AI voiceovers, sync audio timelines, and export production-ready content.
 
 ## Features
