@@ -53,9 +53,9 @@ export const breakdownScript = async (script: string): Promise<StoryBeat[]> => {
   if (!process.env.API_KEY) throw new Error("API Key is missing.");
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  // Use Gemini 2.0 Flash (Stable) for better instruction following
+  // Use Gemini 1.5 Flash (Free tier)
   const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash', 
+    model: 'gemini-1.5-flash',
     contents: { parts: [{ text: script }] },
     config: {
       systemInstruction: SCRIPT_BREAKDOWN_PROMPT,
@@ -108,7 +108,7 @@ export const alignAudioToScript = async (audioFile: File, scriptSegments: { id: 
   `;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-1.5-flash',
     contents: {
       parts: [
         audioPart,
@@ -160,26 +160,9 @@ export const generateImage = async (prompt: string, useUltra: boolean = false): 
       }
   }
 
-  // OPTION 2: Standard Quality (Gemini 2.5 Flash Image)
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-image',
-    contents: {
-      parts: [
-        { text: prompt },
-      ],
-    },
-    config: {
-       // @ts-ignore - Some TS definitions might lag, but 2.5 flash image supports imageConfig
-       imageConfig: { aspectRatio: "16:9" }
-    }
-  });
-
-  for (const part of response.candidates?.[0]?.content?.parts || []) {
-    if (part.inlineData) {
-       return `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
-    }
-  }
-  throw new Error("No image generated.");
+  // OPTION 2: Standard Quality - NOT AVAILABLE with free tier
+  // Free tier doesn't support image generation
+  throw new Error("Image generation requires a paid API key with Imagen or Gemini 2.5 Flash Image enabled. Please upgrade your API key at https://aistudio.google.com/billing or disable image generation features.");
 };
 
 export const generateDocuVideo = async (prompt: string): Promise<string> => {
@@ -240,7 +223,7 @@ export const analyzeImagesBatch = async (files: File[], scriptContext?: string):
   parts.push({ text: textPrompt });
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash', 
+    model: 'gemini-1.5-flash',
     contents: { parts },
     config: {
       systemInstruction: PASS_1_SYSTEM_PROMPT,
@@ -258,55 +241,23 @@ export const analyzeImagesBatch = async (files: File[], scriptContext?: string):
   }
 };
 
-export const generateVoiceover = async (text: string): Promise<File> => {
-  if (!process.env.API_KEY) throw new Error("API Key is missing.");
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-preview-tts",
-    contents: { parts: [{ text: text }] },
-    config: {
-      responseModalities: ["AUDIO"],
-      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
-    },
-  });
-  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!base64Audio) throw new Error("No audio generated.");
-  const binaryString = atob(base64Audio);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
-  return new File([new Blob([bytes], { type: 'audio/wav' })], "ai_voiceover.wav", { type: 'audio/wav' });
+export const generateVoiceover = async (_text: string): Promise<File> => {
+  // TTS is not available with free-tier API keys
+  throw new Error("Text-to-speech requires a paid API key. Please use the 'Upload File' option to add your own voiceover, or upgrade your API key at https://aistudio.google.com/billing");
 };
 
 export const enhanceScript = async (currentScript: string): Promise<string> => {
   if (!process.env.API_KEY) throw new Error("API Key is missing.");
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
+
   const response = await ai.models.generateContent({
-    model: "gemini-2.0-flash",
+    model: "gemini-1.5-flash",
     contents: `Analyze this script for factual accuracy and add interesting historical context or details where relevant. Keep the tone nostalgic. Script: ${currentScript}`,
   });
   return response.text || currentScript;
 };
 
-export const editImageAI = async (imageFile: File, prompt: string): Promise<string> => {
-  if (!process.env.API_KEY) throw new Error("API Key is missing.");
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
-  const imagePart = await fileToPart(imageFile);
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-image',
-    contents: {
-      parts: [
-        imagePart,
-        { text: prompt }
-      ]
-    }
-  });
-
-  for (const part of response.candidates?.[0]?.content?.parts || []) {
-    if (part.inlineData) {
-       return `data:image/png;base64,${part.inlineData.data}`;
-    }
-  }
-  throw new Error("No edited image returned");
+export const editImageAI = async (_imageFile: File, _prompt: string): Promise<string> => {
+  // Image editing is not available with free-tier API keys
+  throw new Error("AI image editing requires a paid API key with Gemini 2.5 Flash Image enabled. Please upgrade your API key at https://aistudio.google.com/billing");
 };
