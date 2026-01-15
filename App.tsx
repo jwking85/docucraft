@@ -1,12 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Video, AlertCircle, Sparkles, Loader2, ArrowRight, Save, Upload, Download, Lock, KeyRound, Unlock, Clapperboard } from 'lucide-react';
+import { AlertCircle, Loader2, ArrowRight, Save, Upload, Clapperboard, Lock, Unlock, KeyRound } from 'lucide-react';
 import { ProcessedImage, AppStep, TimelineScene, ScriptType, ProjectFile } from './types';
 import StoryWorkspace from './components/StoryWorkspace';
 import TimelineView from './components/TimelineView';
-
-// --- CONFIGURATION ---
-const APP_ACCESS_CODE = "1234"; 
 
 // Helpers for Base64 conversion
 const blobToBase64 = (blob: Blob): Promise<string> => {
@@ -24,7 +21,7 @@ const base64ToBlob = async (base64: string): Promise<Blob> => {
 };
 
 const App: React.FC = () => {
-  // --- LOCK SCREEN STATE ---
+  // Lock screen state
   const [isLocked, setIsLocked] = useState(true);
   const [passwordInput, setPasswordInput] = useState("");
   const [lockError, setLockError] = useState(false);
@@ -39,10 +36,6 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const loadInputRef = useRef<HTMLInputElement>(null);
 
-  // Auth State (API Key)
-  const [hasApiKey, setHasApiKey] = useState(false);
-  const [isCheckingKey, setIsCheckingKey] = useState(true);
-
   // Check for stored access on mount
   useEffect(() => {
     const hasAccess = localStorage.getItem("docucraft_access_granted");
@@ -50,6 +43,34 @@ const App: React.FC = () => {
       setIsLocked(false);
     }
   }, []);
+
+  // Cleanup blob URLs when images change or component unmounts
+  useEffect(() => {
+    return () => {
+      images.forEach(img => {
+        if (img.previewUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(img.previewUrl);
+        }
+      });
+    };
+  }, [images]);
+
+  // Keyboard shortcut for save (Ctrl+S / Cmd+S)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleSaveProject();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [images, timeline, currentAudioFile]);
+
+  // Auth State (API Key)
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [isCheckingKey, setIsCheckingKey] = useState(true);
 
   useEffect(() => {
     if (isLocked) return; // Don't check API key until unlocked
@@ -73,7 +94,9 @@ const App: React.FC = () => {
 
   const handleUnlock = (e: React.FormEvent) => {
     e.preventDefault();
-    if (passwordInput === APP_ACCESS_CODE) {
+    const accessCode = process.env.ACCESS_CODE || "";
+
+    if (passwordInput === accessCode) {
       setIsLocked(false);
       localStorage.setItem("docucraft_access_granted", "true");
       setLockError(false);
@@ -108,7 +131,14 @@ const App: React.FC = () => {
   };
 
   const handleReset = () => {
-     if(confirm("Are you sure? Unsaved changes will be lost.")) {
+     const hasContent = timeline.length > 0 || images.length > 0 || currentAudioFile;
+     if (!hasContent) {
+         setStep(AppStep.WORKSPACE);
+         return;
+     }
+
+     const message = "Reset Project?\n\nThis will clear all scenes, images, and audio. Any unsaved progress will be lost.\n\nConsider saving your project first (Ctrl+S).";
+     if(confirm(message)) {
          setStep(AppStep.WORKSPACE);
          setTimeline([]);
          setCurrentAudioFile(null);
@@ -218,7 +248,7 @@ const App: React.FC = () => {
       }
   };
 
-  // --- RENDER LOCK SCREEN ---
+  // Render lock screen
   if (isLocked) {
     return (
         <div className="min-h-screen bg-[#09090b] flex flex-col items-center justify-center text-center p-6 text-slate-200 font-sans relative overflow-hidden">
@@ -228,25 +258,25 @@ const App: React.FC = () => {
                 <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center mb-6 mx-auto shadow-inner border border-slate-700/50">
                     <Lock className="w-6 h-6 text-slate-400" />
                 </div>
-                
+
                 <h1 className="text-xl font-semibold mb-2 text-white tracking-tight">DocuCraft Studio</h1>
-                <p className="text-slate-500 mb-6 text-sm">Restricted Access</p>
+                <p className="text-slate-500 mb-6 text-sm">Private Access Required</p>
 
                 <form onSubmit={handleUnlock} className="space-y-4">
                     <div className="relative">
                         <KeyRound className="absolute left-3 top-3 w-4 h-4 text-slate-600" />
-                        <input 
-                            type="password" 
+                        <input
+                            type="password"
                             value={passwordInput}
                             onChange={(e) => { setPasswordInput(e.target.value); setLockError(false); }}
                             className={`w-full bg-black/50 border ${lockError ? 'border-red-500/50 focus:border-red-500' : 'border-slate-800 focus:border-indigo-500'} rounded-lg py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-slate-700 outline-none transition-all`}
-                            placeholder="Enter Code"
+                            placeholder="Enter Access Code"
                             autoFocus
                         />
                     </div>
-                    {lockError && <p className="text-red-400 text-[10px] text-left pl-1 font-medium animate-pulse">Incorrect code.</p>}
-                    
-                    <button 
+                    {lockError && <p className="text-red-400 text-[10px] text-left pl-1 font-medium animate-pulse">Incorrect access code.</p>}
+
+                    <button
                         type="submit"
                         className="w-full bg-white hover:bg-slate-200 text-black font-semibold py-2.5 rounded-lg transition-all shadow-lg flex items-center justify-center gap-2 text-sm"
                     >
@@ -338,10 +368,10 @@ const App: React.FC = () => {
                    Export
                  </button>
              </nav>
-             
+
              <div className="w-px h-4 bg-slate-800 mx-1" />
-             
-             <button 
+
+             <button
                 onClick={handleLock}
                 className="text-slate-500 hover:text-white transition-colors p-1"
                 title="Lock Studio"

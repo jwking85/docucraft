@@ -1,3 +1,6 @@
+// File upload limits
+export const MAX_FILE_SIZE_MB = 50;
+export const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 export const PASS_1_SYSTEM_PROMPT = `You are a video editor assistant. Your job is to analyze images for a YouTube documentary and output structured metadata for each image.
 If a script is provided, use it to identify specific people, places, or objects mentions in the text.

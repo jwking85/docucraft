@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ProcessedImage, StoryBeat, TimelineScene } from '../types';
 import { breakdownScript, generateImage, generateDocuVideo, generateVoiceover, alignAudioToScript } from '../services/geminiService';
+import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB } from '../constants';
 import StoryBeatCard from './StoryBeatCard';
 import { Sparkles, Layout, Loader2, ArrowRight, Mic, Music, Volume2, Info, AlertCircle, RefreshCw, CheckCircle2, RotateCcw, FileText } from 'lucide-react';
 
@@ -139,15 +140,28 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
 
   const handleError = (e: any, context: string) => {
       console.error(context, e);
-      let msg = "An error occurred.";
+      let msg = "An unexpected error occurred.";
       if (e instanceof Error) msg = e.message;
       else if (typeof e === 'string') msg = e;
       else msg = JSON.stringify(e);
-      
-      if (msg.includes('403') || msg.toLowerCase().includes('permission')) {
-          msg = "API Permission Error: Please check your API Key.";
+
+      // Provide user-friendly error messages
+      if (msg.includes('403') || msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('forbidden')) {
+          msg = `${context} Failed: API permission denied. Please verify your Gemini API key has the required permissions.`;
       } else if (msg.includes('404') || msg.toLowerCase().includes('not found')) {
-          msg = "Model Not Found (404): The AI model is currently unavailable.";
+          msg = `${context} Failed: AI model unavailable (404). The model may not be enabled for your API key.`;
+      } else if (msg.includes('429') || msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('quota')) {
+          msg = `${context} Failed: Rate limit exceeded. Please wait a moment and try again.`;
+      } else if (msg.includes('500') || msg.toLowerCase().includes('internal server')) {
+          msg = `${context} Failed: Server error (500). Google's AI service is experiencing issues. Please try again later.`;
+      } else if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch')) {
+          msg = `${context} Failed: Network error. Please check your internet connection.`;
+      } else if (msg.includes('IMAGEN_UNAVAILABLE')) {
+          msg = "Imagen 4 is not enabled. Enable it in Google Cloud Console or use standard quality.";
+      } else if (msg.includes('VEO_PAYWALL')) {
+          msg = "Veo video generation requires a paid Google Cloud plan. Using image fallback instead.";
+      } else {
+          msg = `${context} Failed: ${msg}`;
       }
       onError(msg);
   };
@@ -187,7 +201,15 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
 
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
       if(e.target.files?.[0]) {
-          setAudioFile(e.target.files[0]);
+          const file = e.target.files[0];
+
+          // Validate file size
+          if (file.size > MAX_FILE_SIZE_BYTES) {
+              setWarningMsg(`Audio file too large! Maximum size is ${MAX_FILE_SIZE_MB}MB. Your file is ${(file.size / 1024 / 1024).toFixed(1)}MB.`);
+              return;
+          }
+
+          setAudioFile(file);
       }
   };
 
@@ -374,6 +396,14 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files.length > 0 && activeUploadBeatId) {
           const file = e.target.files[0];
+
+          // Validate file size
+          if (file.size > MAX_FILE_SIZE_BYTES) {
+              setWarningMsg(`File too large! Maximum size is ${MAX_FILE_SIZE_MB}MB. Your file is ${(file.size / 1024 / 1024).toFixed(1)}MB.`);
+              setActiveUploadBeatId(null);
+              return;
+          }
+
           const isVideo = file.type.startsWith('video');
           const newImage: ProcessedImage = {
               id: `up-${Date.now()}`,
@@ -385,7 +415,7 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
           };
           setImages(prev => [...prev, newImage]);
           setBeats(prev => prev.map(b => b.id === activeUploadBeatId ? { ...b, selected_image_id: newImage.id } : b));
-          
+
           setImages(prev => prev.map(i => i.id === newImage.id ? { ...i, isAnalyzing: false } : i));
       }
       setActiveUploadBeatId(null);
@@ -453,9 +483,14 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
 
       {/* Left Panel: Script & Audio */}
       <div className="lg:col-span-4 flex flex-col gap-4 bg-slate-900/60 p-5 rounded-2xl border border-slate-800 shadow-xl overflow-hidden backdrop-blur-sm">
-        <div className="flex items-center gap-2 pb-2 border-b border-slate-800">
-           <FileText className="w-4 h-4 text-indigo-400" />
-           <h2 className="text-sm font-bold text-white uppercase tracking-wider">Story Script</h2>
+        <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+           <div className="flex items-center gap-2">
+               <FileText className="w-4 h-4 text-indigo-400" />
+               <h2 className="text-sm font-bold text-white uppercase tracking-wider">Story Script</h2>
+           </div>
+           <div className="text-[10px] text-slate-500 font-mono">
+               {script.length} chars • {script.split(/\s+/).filter(w => w.length > 0).length} words
+           </div>
         </div>
         
         <div className="flex-1 flex flex-col min-h-0">
