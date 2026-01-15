@@ -1,0 +1,6 @@
+
+{
+  "name": "DocuCraft AI",
+  "description": "An AI-powered video pre-production tool that analyzes footage and generates synchronized editing timelines based on scripts or transcripts.",
+  "requestFramePermissions": []
+}
