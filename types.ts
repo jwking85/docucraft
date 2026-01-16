@@ -31,6 +31,8 @@ export interface StoryBeat {
   endTime?: number;   // Added for precise audio syncing
 }
 
+export type TransitionType = 'crossfade' | 'cut' | 'wipe-left' | 'wipe-right' | 'slide-left' | 'slide-right' | 'zoom-in' | 'zoom-out' | 'circle-in' | 'circle-out';
+
 export interface TimelineScene {
   scene_id: string | number;
   start_time?: string;
@@ -39,12 +41,17 @@ export interface TimelineScene {
   scene_summary: string;
   script_excerpt?: string;
   selected_images: string[]; // filenames
-  reasoning?: string; 
+  reasoning?: string;
   motion: string;
-  transition_to_next?: string;
-  transition?: string;
-  filter?: 'none' | 'cinematic' | 'noir' | 'vintage' | 'muted';
+  transition_to_next?: TransitionType;
+  transition?: TransitionType;
+  transitionDuration?: number; // Duration in seconds (default 1)
+  filter?: 'none' | 'cinematic' | 'noir' | 'vintage' | 'muted' | 'warm' | 'cool' | 'dramatic';
   overlay_text?: string;
+  textPosition?: 'top' | 'middle' | 'bottom' | 'lower-third';
+  textStyle?: 'default' | 'bold' | 'elegant' | 'modern';
+  kenBurns?: boolean; // Enable Ken Burns effect
+  kenBurnsDirection?: 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right';
 }
 
 export interface ProjectFile {
