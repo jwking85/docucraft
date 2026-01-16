@@ -51,19 +51,34 @@ const cleanJsonOutput = (text: string): string => {
 
 export const breakdownScript = async (script: string): Promise<StoryBeat[]> => {
   if (!process.env.API_KEY) throw new Error("API Key is missing.");
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
-  // Use Gemini 1.5 Flash (Free tier)
-  const response = await ai.models.generateContent({
-    model: 'gemini-1.5-flash',
-    contents: { parts: [{ text: script }] },
-    config: {
-      systemInstruction: SCRIPT_BREAKDOWN_PROMPT,
-      responseMimeType: "application/json",
-    }
+
+  // Use REST API directly with Gemini 1.5 Flash (Free tier)
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.API_KEY}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{
+        parts: [{ text: script }]
+      }],
+      systemInstruction: {
+        parts: [{ text: SCRIPT_BREAKDOWN_PROMPT }]
+      },
+      generationConfig: {
+        responseMimeType: "application/json"
+      }
+    })
   });
 
-  const text = response.text || "[]";
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`API Error: ${response.status} - ${error}`);
+  }
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+
   try {
     const json = JSON.parse(cleanJsonOutput(text));
     return json.map((item: any, idx: number) => ({
