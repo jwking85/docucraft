@@ -147,28 +147,9 @@ export const generateImage = async (prompt: string, useUltra: boolean = false): 
   if (!process.env.API_KEY) throw new Error("API Key is missing.");
   const genAI = new GoogleGenerativeAI(process.env.API_KEY);
   
-  // OPTION 1: Ultra Quality (Imagen 4)
+  // Image generation not available with free tier - skip Ultra option
   if (useUltra) {
-      try {
-        const response = await ai.models.generateImages({
-            model: 'imagen-4.0-generate-001',
-            prompt: prompt,
-            config: {
-              numberOfImages: 1,
-              outputMimeType: 'image/jpeg',
-              aspectRatio: '16:9',
-            },
-        });
-        const base64 = response.generatedImages?.[0]?.image?.imageBytes;
-        if (!base64) throw new Error("No image returned from Imagen.");
-        return `data:image/jpeg;base64,${base64}`;
-      } catch (e: any) {
-          // If Imagen fails (e.g. not enabled on key), user needs to know
-          if (e.message?.includes('404') || e.message?.includes('Not Found') || e.message?.includes('403')) {
-             throw new Error("IMAGEN_UNAVAILABLE");
-          }
-          throw e;
-      }
+    throw new Error("IMAGEN_UNAVAILABLE");
   }
 
   // OPTION 2: Standard Quality - NOT AVAILABLE with free tier
@@ -176,40 +157,9 @@ export const generateImage = async (prompt: string, useUltra: boolean = false): 
   throw new Error("Image generation requires a paid API key with Imagen or Gemini 2.5 Flash Image enabled. Please upgrade your API key at https://aistudio.google.com/billing or disable image generation features.");
 };
 
-export const generateDocuVideo = async (prompt: string): Promise<string> => {
-  if (!process.env.API_KEY) throw new Error("API Key is missing.");
-  const genAI = new GoogleGenerativeAI(process.env.API_KEY);
-
-  try {
-    let operation = await ai.models.generateVideos({
-        model: 'veo-3.1-fast-generate-preview',
-        prompt: `Cinematic documentary footage, photorealistic, 4k. ${prompt}`,
-        config: {
-            numberOfVideos: 1,
-            resolution: '720p',
-            aspectRatio: '16:9'
-        }
-    });
-
-    while (!operation.done) {
-        await new Promise(resolve => setTimeout(resolve, 5000)); 
-        operation = await ai.operations.getVideosOperation({operation: operation});
-    }
-
-    const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
-    if (!downloadLink) throw new Error("Video generation failed or no URI returned.");
-
-    const res = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
-    if (!res.ok) throw new Error("Failed to download generated video.");
-    
-    const blob = await res.blob();
-    return URL.createObjectURL(blob);
-  } catch (e: any) {
-    if (e.message?.includes('404') || e.message?.includes('403') || e.toString().includes('Not Found')) {
-        throw new Error("VEO_PAYWALL");
-    }
-    throw e;
-  }
+export const generateDocuVideo = async (_prompt: string): Promise<string> => {
+  // Video generation not available with free tier
+  throw new Error("VEO_PAYWALL");
 };
 
 export const analyzeImagesBatch = async (files: File[], scriptContext?: string): Promise<ImageAnalysis[]> => {
