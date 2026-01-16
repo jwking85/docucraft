@@ -1,7 +1,6 @@
-
-import { GoogleGenAI } from "@google/genai";
-import { 
-  PASS_1_SYSTEM_PROMPT, 
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import {
+  PASS_1_SYSTEM_PROMPT,
   PASS_1_USER_PROMPT_PREFIX,
   SCRIPT_BREAKDOWN_PROMPT
 } from "../constants";
@@ -97,7 +96,7 @@ export const breakdownScript = async (script: string): Promise<StoryBeat[]> => {
 
 export const alignAudioToScript = async (audioFile: File, scriptSegments: { id: string; text: string }[]): Promise<Record<string, { start: number; end: number }>> => {
   if (!process.env.API_KEY) throw new Error("API Key is missing.");
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const genAI = new GoogleGenerativeAI(process.env.API_KEY);
 
   const audioPart = await fileToPart(audioFile);
   const segmentsList = scriptSegments.map((s, i) => `${i + 1}. "${s.text}" (ID: ${s.id})`).join('\n');
@@ -122,20 +121,17 @@ export const alignAudioToScript = async (audioFile: File, scriptSegments: { id: 
     - Return a JSON object mapping ID to { "start": number, "end": number }.
   `;
 
-  const response = await ai.models.generateContent({
+  const model = genAI.getGenerativeModel({
     model: 'gemini-1.5-flash',
-    contents: {
-      parts: [
-        audioPart,
-        { text: prompt }
-      ]
-    },
-    config: {
-      responseMimeType: "application/json"
-    }
+    generationConfig: { responseMimeType: "application/json" }
   });
 
-  const text = response.text || "{}";
+  const result = await model.generateContent([
+    audioPart,
+    { text: prompt }
+  ]);
+
+  const text = result.response.text() || "{}";
   try {
     return JSON.parse(cleanJsonOutput(text));
   } catch (e) {
@@ -149,7 +145,7 @@ export const alignAudioToScript = async (audioFile: File, scriptSegments: { id: 
  */
 export const generateImage = async (prompt: string, useUltra: boolean = false): Promise<string> => {
   if (!process.env.API_KEY) throw new Error("API Key is missing.");
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const genAI = new GoogleGenerativeAI(process.env.API_KEY);
   
   // OPTION 1: Ultra Quality (Imagen 4)
   if (useUltra) {
@@ -182,7 +178,7 @@ export const generateImage = async (prompt: string, useUltra: boolean = false): 
 
 export const generateDocuVideo = async (prompt: string): Promise<string> => {
   if (!process.env.API_KEY) throw new Error("API Key is missing.");
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const genAI = new GoogleGenerativeAI(process.env.API_KEY);
 
   try {
     let operation = await ai.models.generateVideos({
@@ -219,7 +215,7 @@ export const generateDocuVideo = async (prompt: string): Promise<string> => {
 export const analyzeImagesBatch = async (files: File[], scriptContext?: string): Promise<ImageAnalysis[]> => {
   if (!process.env.API_KEY) throw new Error("API Key is missing.");
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const genAI = new GoogleGenerativeAI(process.env.API_KEY);
   const parts: any[] = [];
   
   for (const file of files) {
@@ -237,16 +233,14 @@ export const analyzeImagesBatch = async (files: File[], scriptContext?: string):
 
   parts.push({ text: textPrompt });
 
-  const response = await ai.models.generateContent({
+  const model = genAI.getGenerativeModel({
     model: 'gemini-1.5-flash',
-    contents: { parts },
-    config: {
-      systemInstruction: PASS_1_SYSTEM_PROMPT,
-      responseMimeType: "application/json",
-    }
+    systemInstruction: PASS_1_SYSTEM_PROMPT,
+    generationConfig: { responseMimeType: "application/json" }
   });
 
-  const text = response.text || "[]";
+  const result = await model.generateContent(parts);
+  const text = result.response.text() || "[]";
   try {
     const json = JSON.parse(cleanJsonOutput(text));
     return Array.isArray(json) ? json : [json];
@@ -263,13 +257,11 @@ export const generateVoiceover = async (_text: string): Promise<File> => {
 
 export const enhanceScript = async (currentScript: string): Promise<string> => {
   if (!process.env.API_KEY) throw new Error("API Key is missing.");
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const genAI = new GoogleGenerativeAI(process.env.API_KEY);
 
-  const response = await ai.models.generateContent({
-    model: "gemini-1.5-flash",
-    contents: `Analyze this script for factual accuracy and add interesting historical context or details where relevant. Keep the tone nostalgic. Script: ${currentScript}`,
-  });
-  return response.text || currentScript;
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const result = await model.generateContent(`Analyze this script for factual accuracy and add interesting historical context or details where relevant. Keep the tone nostalgic. Script: ${currentScript}`);
+  return result.response.text() || currentScript;
 };
 
 export const editImageAI = async (_imageFile: File, _prompt: string): Promise<string> => {
