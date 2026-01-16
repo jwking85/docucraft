@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { ProcessedImage, StoryBeat, TimelineScene } from '../types';
-import { breakdownScript, generateImage, generateDocuVideo, generateVoiceover, alignAudioToScript } from '../services/geminiService';
+import { breakdownScript, generateImage, generateDocuVideo, generateVoiceover, alignAudioToScript, enhanceScript } from '../services/geminiService';
 import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB } from '../constants';
 import StoryBeatCard from './StoryBeatCard';
 import { Sparkles, Layout, Loader2, ArrowRight, Mic, Music, Volume2, Info, AlertCircle, RefreshCw, CheckCircle2, RotateCcw, FileText } from 'lucide-react';
@@ -18,6 +18,7 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
   const [beats, setBeats] = useState<StoryBeat[]>([]);
   const [isBreakingDown, setIsBreakingDown] = useState(false);
   const [warningMsg, setWarningMsg] = useState<string | null>(null);
+  const [isEnhancingScript, setIsEnhancingScript] = useState(false);
   
   // Audio State
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -166,10 +167,23 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
       onError(msg);
   };
 
+  const handleEnhanceScript = async () => {
+    if (!script.trim()) return;
+    setIsEnhancingScript(true);
+    try {
+      const enhanced = await enhanceScript(script);
+      setScript(enhanced);
+    } catch (e) {
+      handleError(e, "Enhance Script");
+    } finally {
+      setIsEnhancingScript(false);
+    }
+  };
+
   const handleBreakdown = async () => {
     if (!script.trim()) return;
     setIsBreakingDown(true);
-    setBeats([]); 
+    setBeats([]);
     setIsAudioSynced(false);
     try {
       const newBeats = await breakdownScript(script);
@@ -542,7 +556,17 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
                 )}
             </div>
 
-            <button 
+            <button
+               onClick={handleEnhanceScript}
+               disabled={!script.trim() || isEnhancingScript}
+               className="w-full py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 flex-shrink-0"
+               title="Use AI to add historical context and improve factual accuracy"
+            >
+               {isEnhancingScript ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+               Enhance Script (AI)
+            </button>
+
+            <button
                onClick={handleBreakdown}
                disabled={!script.trim() || isBreakingDown}
                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/20 transition-all disabled:opacity-50 flex-shrink-0"

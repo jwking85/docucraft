@@ -361,7 +361,7 @@ const App: React.FC = () => {
                    Workspace
                  </button>
                  <button 
-                   onClick={() => step === AppStep.EXPORT && setStep(AppStep.EXPORT)}
+                   onClick={() => setStep(AppStep.EXPORT)}
                    disabled={timeline.length === 0}
                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${step === AppStep.EXPORT ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}
                  >

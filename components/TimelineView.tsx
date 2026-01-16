@@ -90,7 +90,8 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
   const [totalDuration, setTotalDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [editingSceneId, setEditingSceneId] = useState<string | number | null>(null);
-  
+  const [exportQuality, setExportQuality] = useState<'1080p' | '720p' | '4K' | 'vertical'>('1080p');
+
   // Drag and Drop
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
@@ -499,6 +500,21 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    // Get export dimensions and bitrate based on quality setting
+    const qualitySettings = {
+      '720p': { width: 1280, height: 720, bitrate: 8000000 },
+      '1080p': { width: 1920, height: 1080, bitrate: 12000000 },
+      '4K': { width: 3840, height: 2160, bitrate: 25000000 },
+      'vertical': { width: 1080, height: 1920, bitrate: 12000000 }
+    };
+    const settings = qualitySettings[exportQuality];
+
+    // Temporarily resize canvas for export
+    const originalWidth = canvas.width;
+    const originalHeight = canvas.height;
+    canvas.width = settings.width;
+    canvas.height = settings.height;
+
     // 1. Setup
     let wakeLock: any = null;
     try {
@@ -506,7 +522,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
             wakeLock = await (navigator as any).wakeLock.request('screen');
         }
     } catch(err) { console.warn('Wake Lock not supported'); }
-    
+
     // CRITICAL: Use Ref to track rendering state in closure
     isRenderingRef.current = true;
     setIsRendering(true);
@@ -562,9 +578,9 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
     let mimeType = 'video/webm;codecs=vp9';
     if (MediaRecorder.isTypeSupported('video/mp4')) mimeType = 'video/mp4';
 
-    const mediaRecorder = new MediaRecorder(stream, { 
-        mimeType, 
-        videoBitsPerSecond: 12000000 // High bitrate 12Mbps
+    const mediaRecorder = new MediaRecorder(stream, {
+        mimeType,
+        videoBitsPerSecond: settings.bitrate
     });
     
     const chunks: Blob[] = [];
@@ -577,9 +593,15 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `DocuCraft_Export_${Date.now()}.${mimeType === 'video/mp4' ? 'mp4' : 'webm'}`;
+      a.download = `DocuCraft_${exportQuality}_${Date.now()}.${mimeType === 'video/mp4' ? 'mp4' : 'webm'}`;
       a.click();
-      
+
+      // Restore canvas to original size
+      if (canvas) {
+        canvas.width = originalWidth;
+        canvas.height = originalHeight;
+      }
+
       // Cleanup
       isRenderingRef.current = false;
       setIsRendering(false);
@@ -883,7 +905,22 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
                  <button onClick={() => setCinemaMode(!cinemaMode)} className={`p-2 rounded text-xs font-medium flex items-center gap-2 ${cinemaMode ? 'bg-slate-700 text-white' : 'text-slate-400'}`}><Tv className="w-4 h-4" /> Cinema</button>
                  <button onClick={() => setShowVisualizer(!showVisualizer)} className={`p-2 rounded text-xs font-medium flex items-center gap-2 ${showVisualizer ? 'bg-slate-700 text-white' : 'text-slate-400'}`}><Activity className="w-4 h-4" /> Visualizer</button>
               </div>
-              <button onClick={handleRenderExport} disabled={isRendering} className={`px-5 py-2.5 rounded-lg font-bold text-white flex items-center gap-2 shadow-lg transition-transform hover:scale-105 ${isRendering ? 'bg-slate-700 cursor-wait' : 'bg-gradient-to-r from-blue-600 to-indigo-600'}`}>{isRendering ? <Loader2 className="w-5 h-5 animate-spin" /> : <Film className="w-5 h-5" />} Export Video</button>
+              <div className="flex items-center gap-2">
+                 <select
+                    value={exportQuality}
+                    onChange={(e) => setExportQuality(e.target.value as any)}
+                    disabled={isRendering}
+                    title="Export Quality"
+                    aria-label="Export Quality"
+                    className="bg-slate-800 text-white border border-slate-700 rounded-lg px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                 >
+                    <option value="720p">720p (HD)</option>
+                    <option value="1080p">1080p (Full HD)</option>
+                    <option value="4K">4K (Ultra HD)</option>
+                    <option value="vertical">Vertical (1080x1920)</option>
+                 </select>
+                 <button type="button" onClick={handleRenderExport} disabled={isRendering} className={`px-5 py-2.5 rounded-lg font-bold text-white flex items-center gap-2 shadow-lg transition-transform hover:scale-105 ${isRendering ? 'bg-slate-700 cursor-wait' : 'bg-gradient-to-r from-blue-600 to-indigo-600'}`}>{isRendering ? <Loader2 className="w-5 h-5 animate-spin" /> : <Film className="w-5 h-5" />} Export Video</button>
+              </div>
            </div>
         </div>
       </div>
