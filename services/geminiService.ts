@@ -52,7 +52,7 @@ export const breakdownScript = async (script: string): Promise<StoryBeat[]> => {
   if (!process.env.API_KEY) throw new Error("API Key is missing.");
 
   // Use REST API directly with Gemini 1.5 Flash (Free tier)
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.API_KEY}`;
 
   const response = await fetch(url, {
     method: 'POST',
