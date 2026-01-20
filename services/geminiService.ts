@@ -137,7 +137,7 @@ export const alignAudioToScript = async (audioFile: File, scriptSegments: { id: 
  * Generates an image using Pexels API with AI-powered search query extraction
  * This is a professional, reliable solution used by real video editing tools
  */
-export const generateImage = async (prompt: string, useUltra: boolean = false): Promise<string> => {
+export const generateImage = async (prompt: string, _useUltra: boolean = false): Promise<string> => {
   try {
     // Step 1: Use Gemini AI to create a perfect search query
     if (!process.env.API_KEY) {
@@ -181,52 +181,65 @@ Output:`;
 
     let searchQuery = response.text?.trim().replace(/['"]/g, '').replace(/^Output:\s*/i, '') || '';
 
-    console.log(`AI search query: "${searchQuery}"`);
+    console.log(`🔍 AI search query: "${searchQuery}"`);
 
     // Step 2: Use Pexels API to search with that query
-    // Free API key (200 requests/hour) - you can get your own at pexels.com/api
-    const PEXELS_API_KEY = process.env.PEXELS_API_KEY || '563492ad6f91700001000001c24f77c28b594e0aaeec7b3c71cba8e8';
+    const PEXELS_API_KEY = process.env.PEXELS_API_KEY;
 
-    const pexelsClient = createClient(PEXELS_API_KEY);
+    if (PEXELS_API_KEY && PEXELS_API_KEY.length > 20) {
+      try {
+        const pexelsClient = createClient(PEXELS_API_KEY);
 
-    const pexelsResponse = await pexelsClient.photos.search({
-      query: searchQuery,
-      per_page: 5,
-      orientation: 'landscape',
-      size: 'large'
-    });
+        const pexelsResponse = await pexelsClient.photos.search({
+          query: searchQuery,
+          per_page: 5,
+          orientation: 'landscape',
+          size: 'large'
+        });
 
-    if ('photos' in pexelsResponse && pexelsResponse.photos && pexelsResponse.photos.length > 0) {
-      // Get random photo from top 5 results for variety
-      const randomIndex = Math.floor(Math.random() * Math.min(pexelsResponse.photos.length, 5));
-      const photo = pexelsResponse.photos[randomIndex];
-      const imageUrl = photo.src.large2x || photo.src.large;
+        if ('photos' in pexelsResponse && pexelsResponse.photos && pexelsResponse.photos.length > 0) {
+          // Get random photo from top 5 results for variety
+          const randomIndex = Math.floor(Math.random() * Math.min(pexelsResponse.photos.length, 5));
+          const photo = pexelsResponse.photos[randomIndex];
+          const imageUrl = photo.src.large2x || photo.src.large;
 
-      console.log(`✓ Found perfect match on Pexels: ${imageUrl}`);
-      return imageUrl;
+          console.log(`✅ Pexels found: ${imageUrl}`);
+          return imageUrl;
+        }
+
+        console.log('No Pexels results, trying fallback query...');
+
+        // Fallback: Try a more general query
+        const fallbackQuery = searchQuery.split(' ').slice(0, 2).join(' ');
+        const fallbackResponse = await pexelsClient.photos.search({
+          query: fallbackQuery,
+          per_page: 5,
+          orientation: 'landscape'
+        });
+
+        if ('photos' in fallbackResponse && fallbackResponse.photos && fallbackResponse.photos.length > 0) {
+          const photo = fallbackResponse.photos[0];
+          console.log(`✅ Pexels fallback found: ${photo.src.large}`);
+          return photo.src.large2x || photo.src.large;
+        }
+      } catch (pexelsError: any) {
+        console.error('Pexels API error:', pexelsError.message);
+        // Continue to Unsplash fallback
+      }
+    } else {
+      console.log('⚠️ No valid Pexels API key - using Unsplash fallback');
     }
 
-    console.log('No Pexels results, trying fallback query...');
-
-    // Fallback: Try a more general query
-    const fallbackQuery = searchQuery.split(' ').slice(0, 2).join(' ');
-    const fallbackResponse = await pexelsClient.photos.search({
-      query: fallbackQuery,
-      per_page: 5,
-      orientation: 'landscape'
-    });
-
-    if ('photos' in fallbackResponse && fallbackResponse.photos && fallbackResponse.photos.length > 0) {
-      const photo = fallbackResponse.photos[0];
-      return photo.src.large2x || photo.src.large;
-    }
-
-    throw new Error('No results from Pexels');
+    // Fallback: Use Unsplash with AI-optimized keywords
+    const cleanQuery = searchQuery.replace(/[^\w\s]/g, ' ').split(/\s+/).join(',');
+    const unsplashUrl = `https://source.unsplash.com/1920x1080/?${encodeURIComponent(cleanQuery)}`;
+    console.log(`🔄 Using Unsplash: ${unsplashUrl}`);
+    return unsplashUrl;
 
   } catch (error) {
-    console.error('Pexels image generation failed:', error);
+    console.error('Image generation error:', error);
 
-    // Ultimate fallback: Unsplash with simple keywords
+    // Ultimate fallback: Generic Unsplash
     const simpleKeywords = prompt
       .toLowerCase()
       .replace(/[^\w\s]/g, ' ')
