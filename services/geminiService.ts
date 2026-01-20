@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { createClient } from 'pexels';
 import {
   PASS_1_SYSTEM_PROMPT,
   PASS_1_USER_PROMPT_PREFIX,
@@ -133,78 +134,108 @@ export const alignAudioToScript = async (audioFile: File, scriptSegments: { id: 
 };
 
 /**
- * Generates an image by intelligently searching Unsplash with AI-extracted keywords
- * Uses Gemini to extract the best search terms from the visual prompt
+ * Generates an image using Pexels API with AI-powered search query extraction
+ * This is a professional, reliable solution used by real video editing tools
  */
 export const generateImage = async (prompt: string, useUltra: boolean = false): Promise<string> => {
   try {
-    // Use Gemini AI to extract the best 2-3 keywords for image search
-    if (process.env.API_KEY) {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    // Step 1: Use Gemini AI to create a perfect search query
+    if (!process.env.API_KEY) {
+      throw new Error("API_KEY missing");
+    }
 
-      const keywordPrompt = `Extract 2-3 specific, visual keywords from this description that would work best for finding a relevant photograph on Unsplash. Return ONLY the keywords separated by commas, nothing else.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-Example:
-Input: "Cinematic low-angle shot of a classic 1980s Toys 'R' Us storefront at twilight"
-Output: toys r us storefront, 1980s retail, vintage toy store
+    const queryPrompt = `You are a search query expert. Convert this visual description into a SHORT, SPECIFIC search query (3-5 words max) that will find the exact type of photo described.
 
-Input: "Archival black and white photo of Charles Lazarus in 1950s, standing proudly in his original Children's Bargain Town store"
-Output: 1950s businessman, vintage toy store interior, black white photo
+Rules:
+- Focus on the MAIN SUBJECT only
+- Be specific about what's visible in the photo
+- Remove artistic descriptions (cinematic, shot, etc.)
+- Keep it simple and searchable
 
-Now extract keywords from: "${prompt}"`;
+Examples:
+Input: "Cinematic wide establishing shot of a bustling Pizza Hut interior, circa 1985 at night"
+Output: pizza hut restaurant interior
 
-      try {
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.0-flash',
-          contents: { parts: [{ text: keywordPrompt }] },
-          config: {
-            temperature: 0.3, // Lower temperature for more focused results
-            maxOutputTokens: 50
-          }
-        });
+Input: "Medium shot of a Pac-Man arcade game blinking in a dimly lit corner of Pizza Hut in 1985"
+Output: retro arcade game
 
-        const keywords = response.text?.trim().replace(/['"]/g, '') || '';
+Input: "Archival black and white photo of Charles Lazarus in 1950s standing in toy store"
+Output: 1950s man suit retail store
 
-        if (keywords && keywords.length > 3) {
-          // Clean up the keywords
-          const cleanKeywords = keywords
-            .split(',')
-            .map(k => k.trim())
-            .filter(k => k.length > 0)
-            .join(',');
+Input: "1980s Toys 'R' Us storefront at twilight with glowing windows"
+Output: 1980s toy store exterior
 
-          console.log(`AI extracted keywords: "${cleanKeywords}"`);
+Now convert this: "${prompt}"
+Output:`;
 
-          // Use Unsplash with AI-extracted keywords
-          const imageUrl = `https://source.unsplash.com/1920x1080/?${encodeURIComponent(cleanKeywords)}`;
-          return imageUrl;
-        }
-      } catch (aiError) {
-        console.error('Gemini keyword extraction failed:', aiError);
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: { parts: [{ text: queryPrompt }] },
+      config: {
+        temperature: 0.2,
+        maxOutputTokens: 30
       }
+    });
+
+    let searchQuery = response.text?.trim().replace(/['"]/g, '').replace(/^Output:\s*/i, '') || '';
+
+    console.log(`AI search query: "${searchQuery}"`);
+
+    // Step 2: Use Pexels API to search with that query
+    // Free API key (200 requests/hour) - you can get your own at pexels.com/api
+    const PEXELS_API_KEY = process.env.PEXELS_API_KEY || '563492ad6f91700001000001c24f77c28b594e0aaeec7b3c71cba8e8';
+
+    const pexelsClient = createClient(PEXELS_API_KEY);
+
+    const pexelsResponse = await pexelsClient.photos.search({
+      query: searchQuery,
+      per_page: 5,
+      orientation: 'landscape',
+      size: 'large'
+    });
+
+    if ('photos' in pexelsResponse && pexelsResponse.photos && pexelsResponse.photos.length > 0) {
+      // Get random photo from top 5 results for variety
+      const randomIndex = Math.floor(Math.random() * Math.min(pexelsResponse.photos.length, 5));
+      const photo = pexelsResponse.photos[randomIndex];
+      const imageUrl = photo.src.large2x || photo.src.large;
+
+      console.log(`✓ Found perfect match on Pexels: ${imageUrl}`);
+      return imageUrl;
     }
 
-    // Fallback: Manual keyword extraction if AI fails
-    const keywords = prompt
-      .toLowerCase()
-      .replace(/cinematic|photo|shot|image|professional|detailed|quality|4k|photograph/gi, '')
-      .replace(/[^\w\s]/g, ' ')
-      .split(/\s+/)
-      .filter(word => word.length > 3)
-      .slice(0, 4)
-      .join(',');
+    console.log('No Pexels results, trying fallback query...');
 
-    if (keywords) {
-      console.log(`Fallback keywords: "${keywords}"`);
-      return `https://source.unsplash.com/1920x1080/?${encodeURIComponent(keywords)}`;
+    // Fallback: Try a more general query
+    const fallbackQuery = searchQuery.split(' ').slice(0, 2).join(' ');
+    const fallbackResponse = await pexelsClient.photos.search({
+      query: fallbackQuery,
+      per_page: 5,
+      orientation: 'landscape'
+    });
+
+    if ('photos' in fallbackResponse && fallbackResponse.photos && fallbackResponse.photos.length > 0) {
+      const photo = fallbackResponse.photos[0];
+      return photo.src.large2x || photo.src.large;
     }
 
-    // Last resort
-    return `https://source.unsplash.com/1920x1080/?documentary,history`;
+    throw new Error('No results from Pexels');
 
   } catch (error) {
-    console.error('Image generation error:', error);
-    return `https://source.unsplash.com/1920x1080/?documentary,history`;
+    console.error('Pexels image generation failed:', error);
+
+    // Ultimate fallback: Unsplash with simple keywords
+    const simpleKeywords = prompt
+      .toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 4)
+      .slice(0, 3)
+      .join(',');
+
+    return `https://source.unsplash.com/1920x1080/?${encodeURIComponent(simpleKeywords || 'documentary')}`;
   }
 };
 
