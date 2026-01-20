@@ -3,6 +3,7 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { TimelineScene, ProcessedImage, ScriptType } from '../types';
 import { Play, Pause, RotateCcw, Film, Loader2, Volume2, VolumeX, Edit, X, Captions, Tv, Activity, Plus, Save, Music, Palette, Type, ArrowUp, ArrowDown, Trash2, Wand2, AlertTriangle, GripVertical, Clock, Camera, Download } from 'lucide-react';
 import { editImageAI } from '../services/geminiService';
+import { DOCUMENTARY_TEMPLATES, applyTemplateToTimeline } from '../templates/documentaryTemplates';
 
 interface TimelineViewProps {
   timeline: TimelineScene[];
@@ -1244,6 +1245,107 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
       </div>
 
       <div className="pt-4 pb-10">
+        {/* Template Selector */}
+        {normalizedTimeline.length > 1 && (
+          <div className="mb-3 p-3 bg-gradient-to-r from-indigo-950/30 to-blue-950/30 rounded-lg border border-indigo-900/30">
+            <label className="text-xs font-bold text-indigo-400 uppercase tracking-wide mb-2 block">
+              🎬 Apply Documentary Template
+            </label>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {DOCUMENTARY_TEMPLATES.slice(0, 4).map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`Apply "${template.name}" template to all ${normalizedTimeline.length} scenes?\n\n${template.description}\n\nThis will set:\n- Filter: ${template.settings.defaultFilter}\n- Motion: ${template.settings.defaultMotion}\n- Duration: ${template.settings.sceneDuration}s\n- Ken Burns: ${template.settings.kenBurnsEnabled ? 'ON' : 'OFF'}`)) {
+                      const updated = applyTemplateToTimeline(timeline, template);
+                      onUpdateTimeline(updated);
+                    }
+                  }}
+                  className="px-3 py-2.5 bg-gradient-to-br from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white rounded-lg text-xs font-medium transition-all shadow-lg flex flex-col items-center justify-center gap-1"
+                  title={template.tips.join('\n')}
+                >
+                  <span className="text-lg">{template.icon}</span>
+                  <span className="leading-tight text-center">{template.name.split(' ')[0]}</span>
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-500 mt-2 text-center">
+              Instant professional styling for your documentary type
+            </p>
+          </div>
+        )}
+
+        {/* Batch Operations Toolbar */}
+        {normalizedTimeline.length > 1 && (
+          <div className="mb-4 p-3 bg-gradient-to-r from-purple-950/30 to-indigo-950/30 rounded-lg border border-purple-900/30">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-bold text-purple-400 uppercase tracking-wide flex items-center gap-2">
+                <Wand2 className="w-3 h-3" />
+                Batch Operations
+              </label>
+              <span className="text-[10px] text-slate-500">{normalizedTimeline.length} scenes</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const filter = prompt('Apply filter to ALL scenes:\n\nOptions: cinematic, warm, cool, dramatic, noir, vintage, muted, none');
+                  if (filter) {
+                    const newTimeline = timeline.map(s => ({ ...s, filter: filter as any }));
+                    onUpdateTimeline(newTimeline);
+                  }
+                }}
+                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs font-medium flex items-center justify-center gap-2 transition-colors border border-slate-700"
+              >
+                <Palette className="w-3 h-3" />
+                Apply Filter to All
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const motion = prompt('Apply motion to ALL scenes:\n\nOptions: static, slow_zoom_in, slow_zoom_out, pan_left, pan_right');
+                  if (motion) {
+                    const newTimeline = timeline.map(s => ({ ...s, motion }));
+                    onUpdateTimeline(newTimeline);
+                  }
+                }}
+                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs font-medium flex items-center justify-center gap-2 transition-colors border border-slate-700"
+              >
+                <Camera className="w-3 h-3" />
+                Apply Motion to All
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const duration = prompt('Set duration for ALL scenes (in seconds):');
+                  if (duration && !isNaN(parseFloat(duration))) {
+                    const newTimeline = timeline.map(s => ({ ...s, suggested_duration_seconds: parseFloat(duration) }));
+                    onUpdateTimeline(newTimeline);
+                  }
+                }}
+                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs font-medium flex items-center justify-center gap-2 transition-colors border border-slate-700"
+              >
+                <Clock className="w-3 h-3" />
+                Set All Durations
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('Enable Ken Burns effect for ALL scenes?')) {
+                    const newTimeline = timeline.map(s => ({ ...s, kenBurns: true, kenBurnsDirection: 'zoom-in' as any }));
+                    onUpdateTimeline(newTimeline);
+                  }
+                }}
+                className="px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded text-xs font-medium flex items-center justify-center gap-2 transition-colors shadow-lg"
+              >
+                <Film className="w-3 h-3" />
+                Ken Burns All
+              </button>
+            </div>
+          </div>
+        )}
+
         <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center justify-between">
            <span>Timeline Scenes</span>
            <span className="text-xs normal-case text-slate-400 font-normal">Drag to reorder • Adjust time to sync</span>
