@@ -1,7 +1,7 @@
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { TimelineScene, ProcessedImage, ScriptType } from '../types';
-import { Play, Pause, RotateCcw, Film, Loader2, Volume2, VolumeX, Edit, X, Captions, Tv, Activity, Plus, Save, Music, Palette, Type, ArrowUp, ArrowDown, Trash2, Wand2, AlertTriangle, GripVertical, Clock } from 'lucide-react';
+import { Play, Pause, RotateCcw, Film, Loader2, Volume2, VolumeX, Edit, X, Captions, Tv, Activity, Plus, Save, Music, Palette, Type, ArrowUp, ArrowDown, Trash2, Wand2, AlertTriangle, GripVertical, Clock, Camera, Download } from 'lucide-react';
 import { editImageAI } from '../services/geminiService';
 
 interface TimelineViewProps {
@@ -496,6 +496,130 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
      if(e.target.files?.[0]) setBgmFile(e.target.files[0]);
   };
 
+  const handleGenerateThumbnail = async () => {
+    const canvas = canvasRef.current;
+    if (!canvas || normalizedTimeline.length === 0) return;
+
+    try {
+      // Capture current frame
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Get first scene or current scene for thumbnail
+      const thumbnailScene = normalizedTimeline[0];
+      const firstImage = thumbnailScene.selected_images[0];
+
+      if (!firstImage) {
+        onError('No image available in first scene for thumbnail');
+        return;
+      }
+
+      // Find the actual image
+      const imgData = images.find(img => img.file?.name === firstImage || img.analysis?.filename === firstImage);
+      if (!imgData) {
+        onError('Image not found for thumbnail');
+        return;
+      }
+
+      // Load image
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.src = imgData.previewUrl;
+
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+
+      // Create thumbnail canvas
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.width = 1280;
+      thumbCanvas.height = 720;
+      const thumbCtx = thumbCanvas.getContext('2d')!;
+
+      // Draw image
+      thumbCtx.drawImage(img, 0, 0, 1280, 720);
+
+      // Add dark overlay
+      thumbCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      thumbCtx.fillRect(0, 0, 1280, 720);
+
+      // Add title text
+      const title = thumbnailScene.scene_summary || 'Documentary';
+      thumbCtx.font = 'bold 80px Impact, Arial Black';
+      thumbCtx.textAlign = 'center';
+      thumbCtx.strokeStyle = 'black';
+      thumbCtx.lineWidth = 8;
+      thumbCtx.fillStyle = 'white';
+
+      // Word wrap
+      const words = title.split(' ');
+      const lines: string[] = [];
+      let currentLine = words[0];
+
+      for (let i = 1; i < words.length; i++) {
+        const testLine = currentLine + ' ' + words[i];
+        const metrics = thumbCtx.measureText(testLine);
+        if (metrics.width > 1100) {
+          lines.push(currentLine);
+          currentLine = words[i];
+        } else {
+          currentLine = testLine;
+        }
+      }
+      lines.push(currentLine);
+
+      // Draw lines
+      const lineHeight = 90;
+      const totalHeight = lines.length * lineHeight;
+      const startY = (720 - totalHeight) / 2 + 50;
+
+      lines.forEach((line, i) => {
+        const y = startY + (i * lineHeight);
+        thumbCtx.strokeText(line, 640, y);
+        thumbCtx.fillText(line, 640, y);
+      });
+
+      // Download thumbnail
+      thumbCanvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `DocuCraft_Thumbnail_${Date.now()}.jpg`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }, 'image/jpeg', 0.95);
+
+      onError('Thumbnail generated successfully!'); // Using error handler for success message
+    } catch (error) {
+      onError('Failed to generate thumbnail: ' + (error as Error).message);
+    }
+  };
+
+  const handleCopyChapterMarkers = () => {
+    if (normalizedTimeline.length === 0) return;
+
+    // Generate chapter markers
+    const chapters = normalizedTimeline.map((scene, index) => {
+      const minutes = Math.floor(scene.startTimeSec / 60);
+      const seconds = Math.floor(scene.startTimeSec % 60);
+      const timestamp = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      const title = scene.scene_summary || `Scene ${index + 1}`;
+      return `${timestamp} - ${title}`;
+    });
+
+    const chaptersText = chapters.join('\n');
+
+    // Copy to clipboard
+    navigator.clipboard.writeText(chaptersText).then(() => {
+      onError('Chapter markers copied to clipboard! Paste in YouTube video description.');
+    }).catch(() => {
+      // Fallback: show in alert
+      alert('Copy these chapter markers to your YouTube description:\n\n' + chaptersText);
+    });
+  };
+
   const handleRenderExport = async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -728,6 +852,9 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
     const [overlayText, setOverlayText] = useState(scene.overlay_text || '');
     const [selectedImages, setSelectedImages] = useState<string[]>(scene.selected_images);
     const [isProcessingAI, setIsProcessingAI] = useState(false);
+    const [transition, setTransition] = useState(scene.transition_to_next || 'crossfade');
+    const [kenBurns, setKenBurns] = useState(scene.kenBurns || false);
+    const [kenBurnsDirection, setKenBurnsDirection] = useState(scene.kenBurnsDirection || 'zoom-in');
 
     const toggleImage = (filename: string) => {
       if (selectedImages.includes(filename)) {
@@ -791,13 +918,50 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
               <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800">
                   <div>
                     <label className="text-xs text-blue-400 font-medium block mb-1 flex items-center gap-1"><Palette className="w-3 h-3"/> Filter</label>
-                    <select className="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm text-slate-200" value={filter} onChange={e => setFilter(e.target.value as any)}>
-                      <option value="none">None</option><option value="cinematic">Cinematic</option><option value="noir">Noir (B&W)</option><option value="vintage">Vintage</option><option value="muted">Muted</option>
+                    <select className="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm text-slate-200" value={filter} onChange={e => setFilter(e.target.value as any)} title="Color Filter">
+                      <option value="none">None</option><option value="cinematic">Cinematic</option><option value="warm">Warm</option><option value="cool">Cool</option><option value="dramatic">Dramatic</option><option value="noir">Noir (B&W)</option><option value="vintage">Vintage</option><option value="muted">Muted</option>
                     </select>
                   </div>
                   <div>
                     <label className="text-xs text-blue-400 font-medium block mb-1 flex items-center gap-1"><Type className="w-3 h-3"/> Text Overlay</label>
                     <input type="text" placeholder="Title / Lower Third" className="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm text-slate-200" value={overlayText} onChange={e => setOverlayText(e.target.value)} />
+                  </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-800">
+                  <div>
+                    <label className="text-xs text-purple-400 font-medium block mb-1 flex items-center gap-1"><Film className="w-3 h-3"/> Transition</label>
+                    <select className="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm text-slate-200" value={transition} onChange={e => setTransition(e.target.value as any)} title="Transition Type">
+                      <option value="crossfade">Crossfade</option>
+                      <option value="cut">Cut (Instant)</option>
+                      <option value="wipe-left">Wipe Left</option>
+                      <option value="wipe-right">Wipe Right</option>
+                      <option value="slide-left">Slide Left</option>
+                      <option value="slide-right">Slide Right</option>
+                      <option value="zoom-in">Zoom In</option>
+                      <option value="zoom-out">Zoom Out</option>
+                      <option value="circle-in">Circle In</option>
+                      <option value="circle-out">Circle Out</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-purple-400 font-medium block mb-1 flex items-center gap-1"><Camera className="w-3 h-3"/> Ken Burns Effect</label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setKenBurns(!kenBurns)}
+                        className={`flex-1 px-2 py-1.5 rounded text-xs font-medium transition-colors ${kenBurns ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                      >
+                        {kenBurns ? 'ON' : 'OFF'}
+                      </button>
+                      {kenBurns && (
+                        <select className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200" value={kenBurnsDirection} onChange={e => setKenBurnsDirection(e.target.value as any)} title="Ken Burns Direction">
+                          <option value="zoom-in">Zoom In</option>
+                          <option value="zoom-out">Zoom Out</option>
+                          <option value="pan-left">Pan Left</option>
+                          <option value="pan-right">Pan Right</option>
+                        </select>
+                      )}
+                    </div>
                   </div>
               </div>
            </div>
@@ -844,8 +1008,18 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
         </div>
 
         <div className="flex justify-end gap-3 mt-4 pt-3 border-t border-slate-800">
-           <button onClick={onClose} className="px-3 py-1.5 rounded text-sm text-slate-300 hover:text-white">Cancel</button>
-           <button onClick={() => handleEditSave(scene.scene_id, { suggested_duration_seconds: duration, motion, scene_summary: summary, filter: filter as any, overlay_text: overlayText, selected_images: selectedImages })} className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm flex items-center gap-2"><Save className="w-3 h-3" /> Save Changes</button>
+           <button type="button" onClick={onClose} className="px-3 py-1.5 rounded text-sm text-slate-300 hover:text-white">Cancel</button>
+           <button type="button" onClick={() => handleEditSave(scene.scene_id, {
+             suggested_duration_seconds: duration,
+             motion,
+             scene_summary: summary,
+             filter: filter as any,
+             overlay_text: overlayText,
+             selected_images: selectedImages,
+             transition_to_next: transition as any,
+             kenBurns,
+             kenBurnsDirection: kenBurnsDirection as any
+           })} className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm flex items-center gap-2"><Save className="w-3 h-3" /> Save Changes</button>
         </div>
       </div>
     );
@@ -906,6 +1080,26 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
                  <button onClick={() => setShowVisualizer(!showVisualizer)} className={`p-2 rounded text-xs font-medium flex items-center gap-2 ${showVisualizer ? 'bg-slate-700 text-white' : 'text-slate-400'}`}><Activity className="w-4 h-4" /> Visualizer</button>
               </div>
               <div className="flex items-center gap-2">
+                 <button
+                    type="button"
+                    onClick={handleGenerateThumbnail}
+                    disabled={isRendering || normalizedTimeline.length === 0}
+                    className="px-3 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
+                    title="Generate YouTube Thumbnail"
+                 >
+                    <Camera className="w-4 h-4" />
+                    Thumbnail
+                 </button>
+                 <button
+                    type="button"
+                    onClick={handleCopyChapterMarkers}
+                    disabled={normalizedTimeline.length === 0}
+                    className="px-3 py-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
+                    title="Copy YouTube Chapter Markers"
+                 >
+                    <Download className="w-4 h-4" />
+                    Chapters
+                 </button>
                  <select
                     value={exportQuality}
                     onChange={(e) => setExportQuality(e.target.value as any)}
