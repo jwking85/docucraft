@@ -4,6 +4,7 @@ import { TimelineScene, ProcessedImage, ScriptType } from '../types';
 import { Play, Pause, RotateCcw, Film, Loader2, Volume2, VolumeX, Edit, X, Captions, Tv, Activity, Plus, Save, Music, Palette, Type, ArrowUp, ArrowDown, Trash2, Wand2, AlertTriangle, GripVertical, Clock, Camera, Download } from 'lucide-react';
 import { editImageAI } from '../services/geminiService';
 import { DOCUMENTARY_TEMPLATES, applyTemplateToTimeline } from '../templates/documentaryTemplates';
+import BackgroundMusicSelector, { BackgroundMusicConfig } from './BackgroundMusicSelector';
 
 interface TimelineViewProps {
   timeline: TimelineScene[];
@@ -11,6 +12,8 @@ interface TimelineViewProps {
   images: ProcessedImage[];
   onReset: () => void;
   audioFile: File | null;
+  backgroundMusic: BackgroundMusicConfig | null;
+  onBackgroundMusicChange: (config: BackgroundMusicConfig | null) => void;
   scriptContent: string;
   scriptType: ScriptType;
   onError: (msg: string) => void;
@@ -68,7 +71,18 @@ const parseSRT = (content: string): Subtitle[] => {
   return subtitles;
 };
 
-const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline, images, onReset, audioFile, scriptContent, scriptType, onError }) => {
+const TimelineView: React.FC<TimelineViewProps> = ({
+  timeline,
+  onUpdateTimeline,
+  images,
+  onReset,
+  audioFile,
+  backgroundMusic,
+  onBackgroundMusicChange,
+  scriptContent,
+  scriptType,
+  onError
+}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const bgmRef = useRef<HTMLAudioElement | null>(null);
@@ -130,11 +144,14 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
       audio.preload = 'auto';
       audioRef.current = audio;
     }
-    if (bgmFile) {
-      const url = URL.createObjectURL(bgmFile);
+
+    // Use backgroundMusic config if available, otherwise fall back to bgmFile
+    const musicFile = backgroundMusic?.file || bgmFile;
+    if (musicFile) {
+      const url = URL.createObjectURL(musicFile);
       const audio = new Audio(url);
       audio.preload = 'auto';
-      audio.volume = 0.15; 
+      audio.volume = backgroundMusic?.volume || 0.15;
       audio.loop = true;
       bgmRef.current = audio;
     } else {
@@ -158,7 +175,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
             }
         }
     } catch(e) { console.warn("Audio Context Init", e); }
-  }, [audioFile, bgmFile]);
+  }, [audioFile, bgmFile, backgroundMusic]);
 
   // Sync Audio when NOT playing (Scrubbing)
   useEffect(() => {
@@ -507,6 +524,20 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
           }
           audioRef.current.play().catch(e => console.log("Audio play error", e));
       }
+
+      // Auto-ducking: Lower BGM volume when voiceover is playing
+      if (bgmRef.current && backgroundMusic?.autoDuck && audioRef.current) {
+        const isVoiceoverPlaying = !audioRef.current.paused && !audioRef.current.ended;
+        const targetVolume = isVoiceoverPlaying
+          ? (backgroundMusic.volume * (1 - backgroundMusic.duckingAmount))
+          : backgroundMusic.volume;
+
+        // Smooth volume transition
+        const currentVol = bgmRef.current.volume;
+        const diff = targetVolume - currentVol;
+        bgmRef.current.volume = currentVol + diff * 0.1; // Smooth interpolation
+      }
+
       bgmRef.current?.play().catch(() => {});
       
       mediaCache.current.forEach(m => {
@@ -725,9 +756,10 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
         }));
     }
 
-    if (bgmFile) {
-        exportBgm = new Audio(URL.createObjectURL(bgmFile));
-        exportBgm.volume = 0.15;
+    const musicFile = backgroundMusic?.file || bgmFile;
+    if (musicFile) {
+        exportBgm = new Audio(URL.createObjectURL(musicFile));
+        exportBgm.volume = backgroundMusic?.volume || 0.15;
         exportBgm.loop = true;
         const source = exportCtx.createMediaElementSource(exportBgm);
         source.connect(dest);
@@ -1275,6 +1307,14 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
             </p>
           </div>
         )}
+
+        {/* Background Music Selector */}
+        <div className="mb-4">
+          <BackgroundMusicSelector
+            currentConfig={backgroundMusic}
+            onMusicSelected={onBackgroundMusicChange}
+          />
+        </div>
 
         {/* Batch Operations Toolbar */}
         {normalizedTimeline.length > 1 && (

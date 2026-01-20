@@ -4,6 +4,7 @@ import { AlertCircle, Loader2, ArrowRight, Save, Upload, Clapperboard, Lock, Unl
 import { ProcessedImage, AppStep, TimelineScene, ScriptType, ProjectFile } from './types';
 import StoryWorkspace from './components/StoryWorkspace';
 import TimelineView from './components/TimelineView';
+import { BackgroundMusicConfig } from './components/BackgroundMusicSelector';
 
 // Helpers for Base64 conversion
 const blobToBase64 = (blob: Blob): Promise<string> => {
@@ -32,6 +33,7 @@ const App: React.FC = () => {
   const [timeline, setTimeline] = useState<TimelineScene[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [currentAudioFile, setCurrentAudioFile] = useState<File | null>(null);
+  const [backgroundMusic, setBackgroundMusic] = useState<BackgroundMusicConfig | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const loadInputRef = useRef<HTMLInputElement>(null);
@@ -448,12 +450,14 @@ const App: React.FC = () => {
             )}
 
             {step === AppStep.EXPORT && (
-                <TimelineView 
+                <TimelineView
                     timeline={timeline}
                     onUpdateTimeline={setTimeline}
                     images={images}
                     onReset={handleReset}
-                    audioFile={currentAudioFile} 
+                    audioFile={currentAudioFile}
+                    backgroundMusic={backgroundMusic}
+                    onBackgroundMusicChange={setBackgroundMusic}
                     scriptContent={""}
                     scriptType={ScriptType.PLAIN_TEXT}
                     onError={setError}
