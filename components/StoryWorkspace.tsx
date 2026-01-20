@@ -4,7 +4,8 @@ import { ProcessedImage, StoryBeat, TimelineScene } from '../types';
 import { breakdownScript, generateImage, generateDocuVideo, generateVoiceover, alignAudioToScript, enhanceScript } from '../services/geminiService';
 import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB } from '../constants';
 import StoryBeatCard from './StoryBeatCard';
-import { Sparkles, Layout, Loader2, ArrowRight, Mic, Music, Volume2, Info, AlertCircle, RefreshCw, CheckCircle2, RotateCcw, FileText } from 'lucide-react';
+import VoiceRecorder from './VoiceRecorder';
+import { Sparkles, Layout, Loader2, ArrowRight, Mic, Music, Volume2, Info, AlertCircle, RefreshCw, CheckCircle2, RotateCcw, FileText, Radio } from 'lucide-react';
 
 interface StoryWorkspaceProps {
   onComplete: (timeline: TimelineScene[], audioFile: File | null) => void;
@@ -26,6 +27,7 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
   const [audioDisplayDuration, setAudioDisplayDuration] = useState<number>(0);
   const [isSyncingAudio, setIsSyncingAudio] = useState(false);
   const [isAudioSynced, setIsAudioSynced] = useState(false);
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
@@ -225,6 +227,11 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
 
           setAudioFile(file);
       }
+  };
+
+  const handleRecordingComplete = (file: File) => {
+      setAudioFile(file);
+      setShowVoiceRecorder(false);
   };
 
   const handleSmartSync = async () => {
@@ -536,23 +543,45 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
                         </div>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-2 gap-2">
-                        <button 
-                           onClick={handleGenerateVoice} 
-                           disabled={!script.trim() || isGeneratingVoice}
-                           className="py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded text-xs font-medium flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-                        >
-                            {isGeneratingVoice ? <Loader2 className="w-3 h-3 animate-spin"/> : <Mic className="w-3 h-3 text-purple-400" />}
-                            AI Narrator
-                        </button>
-                        <button 
-                           onClick={() => audioInputRef.current?.click()}
-                           className="py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded text-xs font-medium flex items-center justify-center gap-2 transition-all"
-                        >
-                            <Music className="w-3 h-3 text-blue-400" />
-                            Upload File
-                        </button>
-                    </div>
+                    <>
+                        <div className="grid grid-cols-3 gap-2">
+                            <button
+                               onClick={handleGenerateVoice}
+                               disabled={!script.trim() || isGeneratingVoice}
+                               className="py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded text-xs font-medium flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                            >
+                                {isGeneratingVoice ? <Loader2 className="w-3 h-3 animate-spin"/> : <Mic className="w-3 h-3 text-purple-400" />}
+                                AI TTS
+                            </button>
+                            <button
+                               onClick={() => setShowVoiceRecorder(!showVoiceRecorder)}
+                               className={`py-2 border rounded text-xs font-medium flex items-center justify-center gap-2 transition-all ${
+                                   showVoiceRecorder
+                                       ? 'bg-red-600/20 border-red-500/50 text-red-300'
+                                       : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
+                               }`}
+                            >
+                                <Radio className="w-3 h-3 text-red-400" />
+                                Record
+                            </button>
+                            <button
+                               onClick={() => audioInputRef.current?.click()}
+                               className="py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded text-xs font-medium flex items-center justify-center gap-2 transition-all"
+                            >
+                                <Music className="w-3 h-3 text-blue-400" />
+                                Upload
+                            </button>
+                        </div>
+
+                        {showVoiceRecorder && (
+                            <div className="mt-3">
+                                <VoiceRecorder
+                                    onRecordingComplete={handleRecordingComplete}
+                                    onError={(msg) => setWarningMsg(msg)}
+                                />
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
 
