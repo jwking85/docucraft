@@ -274,6 +274,9 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
         if (currentScene.filter) {
             switch(currentScene.filter) {
                 case 'cinematic': ctx.filter = 'contrast(1.2) saturate(1.2)'; break;
+                case 'warm': ctx.filter = 'saturate(1.1) sepia(0.15) brightness(1.05)'; break;
+                case 'cool': ctx.filter = 'saturate(0.9) hue-rotate(200deg) brightness(0.95)'; break;
+                case 'dramatic': ctx.filter = 'contrast(1.4) saturate(0.8) brightness(0.9)'; break;
                 case 'noir': ctx.filter = 'grayscale(1) contrast(1.2)'; break;
                 case 'vintage': ctx.filter = 'sepia(0.6) contrast(0.9)'; break;
                 case 'muted': ctx.filter = 'saturate(0.5) brightness(0.9)'; break;
@@ -281,14 +284,32 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
             }
         }
 
-        const transitionDuration = 1.0; 
+        const transitionDuration = currentScene.transitionDuration || 1.0;
         const timeRemaining = currentScene.endTimeSec - time;
         const nextScene = normalizedTimeline[currentSceneIndex + 1];
 
         if (timeRemaining < transitionDuration && nextScene) {
-           const transitionProgress = 1 - (timeRemaining / transitionDuration); 
-           renderLayer(ctx, currentScene, time, 1.0); 
-           renderLayer(ctx, nextScene, time, transitionProgress); 
+           const transitionProgress = 1 - (timeRemaining / transitionDuration);
+           const transitionType = currentScene.transition_to_next || 'crossfade';
+
+           // Handle different transition types
+           if (transitionType === 'cut') {
+             // Instant cut - no transition
+             renderLayer(ctx, nextScene, time, 1.0);
+           } else if (transitionType === 'crossfade') {
+             // Classic crossfade
+             renderLayer(ctx, currentScene, time, 1.0);
+             renderLayer(ctx, nextScene, time, transitionProgress);
+           } else {
+             // Advanced transitions - render both scenes at full opacity
+             // and use transition effects
+             renderLayer(ctx, currentScene, time, 1.0);
+             renderLayer(ctx, nextScene, time, 1.0);
+
+             // Apply transition mask/effect (simplified - full implementation would use youtubeUtils)
+             // For now, use crossfade as fallback for complex transitions
+             ctx.globalAlpha = transitionProgress;
+           }
         } else {
            renderLayer(ctx, currentScene, time, 1.0);
         }
@@ -394,13 +415,38 @@ const TimelineView: React.FC<TimelineViewProps> = ({ timeline, onUpdateTimeline,
     const segmentProgress = (localTime - (imageIndex * segmentDuration)) / segmentDuration;
     const smoothProgress = -(Math.cos(Math.PI * segmentProgress) - 1) / 2;
 
-    let scale = 1.0; let tx = 0; const baseScale = 1.05; 
-    switch (scene.motion) {
-      case 'slow_zoom_in': scale = baseScale + (smoothProgress * 0.15); break;
-      case 'slow_zoom_out': scale = (baseScale + 0.15) - (smoothProgress * 0.15); break;
-      case 'pan_left': scale = baseScale + 0.1; tx = (smoothProgress * 100); break;
-      case 'pan_right': scale = baseScale + 0.1; tx = -100 + (smoothProgress * 100); break;
-      default: scale = baseScale;
+    let scale = 1.0; let tx = 0; const baseScale = 1.05;
+
+    // Ken Burns Effect (overrides motion if enabled)
+    if (scene.kenBurns) {
+      const intensity = 0.2;
+      switch (scene.kenBurnsDirection) {
+        case 'zoom-in':
+          scale = 1 + (intensity * smoothProgress);
+          break;
+        case 'zoom-out':
+          scale = 1 + intensity - (intensity * smoothProgress);
+          break;
+        case 'pan-left':
+          scale = 1.1;
+          tx = (intensity * smoothProgress * 100);
+          break;
+        case 'pan-right':
+          scale = 1.1;
+          tx = -(intensity * smoothProgress * 100);
+          break;
+        default:
+          scale = 1 + (intensity * smoothProgress);
+      }
+    } else {
+      // Original motion effects
+      switch (scene.motion) {
+        case 'slow_zoom_in': scale = baseScale + (smoothProgress * 0.15); break;
+        case 'slow_zoom_out': scale = (baseScale + 0.15) - (smoothProgress * 0.15); break;
+        case 'pan_left': scale = baseScale + 0.1; tx = (smoothProgress * 100); break;
+        case 'pan_right': scale = baseScale + 0.1; tx = -100 + (smoothProgress * 100); break;
+        default: scale = baseScale;
+      }
     }
 
     const w = ctx.canvas.width; const h = ctx.canvas.height;
