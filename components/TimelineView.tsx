@@ -1257,20 +1257,68 @@ const TimelineView: React.FC<TimelineViewProps> = ({
                     <Download className="w-4 h-4" />
                     Chapters
                  </button>
-                 <select
-                    value={exportQuality}
-                    onChange={(e) => setExportQuality(e.target.value as any)}
-                    disabled={isRendering}
-                    title="Export Quality"
-                    aria-label="Export Quality"
-                    className="bg-slate-800 text-white border border-slate-700 rounded-lg px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                 >
-                    <option value="720p">720p (HD)</option>
-                    <option value="1080p">1080p (Full HD)</option>
-                    <option value="4K">4K (Ultra HD)</option>
-                    <option value="vertical">Vertical (1080x1920)</option>
-                 </select>
-                 <button type="button" onClick={handleRenderExport} disabled={isRendering} className={`px-5 py-2.5 rounded-lg font-bold text-white flex items-center gap-2 shadow-lg transition-transform hover:scale-105 ${isRendering ? 'bg-slate-700 cursor-wait' : 'bg-gradient-to-r from-blue-600 to-indigo-600'}`}>{isRendering ? <Loader2 className="w-5 h-5 animate-spin" /> : <Film className="w-5 h-5" />} Export Video</button>
+                 <div className="flex items-center gap-2 flex-wrap">
+                    {/* Platform Quick Presets */}
+                    <div className="flex items-center gap-1 bg-slate-900/50 p-1 rounded-lg border border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setExportQuality('1080p')}
+                        disabled={isRendering}
+                        className={`px-2.5 py-1.5 text-xs font-medium rounded transition-all ${
+                          exportQuality === '1080p'
+                            ? 'bg-red-600 text-white shadow-lg'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                        }`}
+                        title="YouTube Standard (1920x1080)"
+                      >
+                        📺 YouTube
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExportQuality('vertical')}
+                        disabled={isRendering}
+                        className={`px-2.5 py-1.5 text-xs font-medium rounded transition-all ${
+                          exportQuality === 'vertical'
+                            ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white shadow-lg'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                        }`}
+                        title="TikTok/Instagram Reels (1080x1920)"
+                      >
+                        📱 Shorts
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExportQuality('4K')}
+                        disabled={isRendering}
+                        className={`px-2.5 py-1.5 text-xs font-medium rounded transition-all ${
+                          exportQuality === '4K'
+                            ? 'bg-gradient-to-r from-yellow-600 to-orange-600 text-white shadow-lg'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                        }`}
+                        title="4K Ultra HD (3840x2160)"
+                      >
+                        ✨ 4K
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExportQuality('720p')}
+                        disabled={isRendering}
+                        className={`px-2.5 py-1.5 text-xs font-medium rounded transition-all ${
+                          exportQuality === '720p'
+                            ? 'bg-blue-600 text-white shadow-lg'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                        }`}
+                        title="720p HD (1280x720)"
+                      >
+                        ⚡ Fast
+                      </button>
+                    </div>
+
+                    <button type="button" onClick={handleRenderExport} disabled={isRendering} className={`px-5 py-2.5 rounded-lg font-bold text-white flex items-center gap-2 shadow-lg transition-transform hover:scale-105 ${isRendering ? 'bg-slate-700 cursor-wait' : 'bg-gradient-to-r from-blue-600 to-indigo-600'}`}>
+                      {isRendering ? <Loader2 className="w-5 h-5 animate-spin" /> : <Film className="w-5 h-5" />}
+                      Export {exportQuality === '1080p' ? 'for YouTube' : exportQuality === 'vertical' ? 'for Shorts' : exportQuality === '4K' ? '4K' : '720p'}
+                    </button>
+                 </div>
               </div>
            </div>
         </div>
