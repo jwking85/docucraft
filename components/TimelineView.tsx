@@ -1201,16 +1201,23 @@ const TimelineView: React.FC<TimelineViewProps> = ({
       {/* Hidden container for caching videos to prevent browser throttling */}
       <div ref={hiddenMediaContainerRef} style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', pointerEvents: 'none' }}></div>
 
-      <div className="flex flex-col md:flex-row items-center justify-between py-4 border-b border-slate-700 gap-4">
-        <div><h2 className="text-2xl font-bold text-white">Timeline Result</h2><p className="text-slate-400 text-sm">Review, edit, and export your documentary.</p></div>
-        <div className="flex items-center gap-3">
-            <div className="relative overflow-hidden group">
-                 <button className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors">
-                    <Music className="w-4 h-4" /> {bgmFile ? bgmFile.name.substring(0,15)+'...' : 'Add BGM'}
-                 </button>
-                 <input type="file" accept="audio/*" onChange={handleBgmUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
-            </div>
-            <button onClick={onReset} className="px-3 py-2 text-sm text-slate-300 hover:text-white transition-colors">Start Over</button>
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between py-4 border-b border-slate-700 gap-4 mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+            🎬 Export Studio
+          </h2>
+          <p className="text-slate-400 text-sm mt-1">
+            Preview, customize, and export your documentary • {normalizedTimeline.length} scenes • {formatTime(totalDuration)}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+            <button
+              onClick={onReset}
+              className="px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+              title="Start over with a new documentary"
+            >
+              ← Back to Workspace
+            </button>
         </div>
       </div>
 
@@ -1233,107 +1240,150 @@ const TimelineView: React.FC<TimelineViewProps> = ({
           )}
         </div>
 
-        <div className="bg-slate-900 p-4 border-t border-slate-800 space-y-4">
-           <div className="flex items-center gap-4">
-              <span className="text-xs font-mono text-slate-400">{formatTime(currentTime)}</span>
-              <input type="range" min={0} max={totalDuration} step={0.1} value={currentTime} onChange={handleSeek} className="flex-1 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500" disabled={isRendering} />
-              <span className="text-xs font-mono text-slate-400">{formatTime(totalDuration)}</span>
-           </div>
-           <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                 <button onClick={() => setIsPlaying(!isPlaying)} disabled={isRendering} className="w-10 h-10 flex items-center justify-center bg-white text-black hover:bg-slate-200 rounded-full transition-colors">{isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}</button>
-                 <button onClick={() => { setIsPlaying(false); setCurrentTime(0); }} className="text-slate-400 hover:text-white p-2"><RotateCcw className="w-5 h-5" /></button>
-                 {audioFile && <button onClick={() => { if(audioRef.current) audioRef.current.muted = !audioRef.current.muted; setIsMuted(!isMuted); }} className={`p-2 ${isMuted ? 'text-red-400' : 'text-slate-400'}`}>{isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}</button>}
+        <div className="bg-slate-900 border-t border-slate-800">
+           {/* Playback Controls */}
+           <div className="p-4 space-y-3">
+              <div className="flex items-center gap-4">
+                 <span className="text-xs font-mono text-slate-400 w-16 text-right">{formatTime(currentTime)}</span>
+                 <input type="range" min={0} max={totalDuration} step={0.1} value={currentTime} onChange={handleSeek} className="flex-1 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500" disabled={isRendering} />
+                 <span className="text-xs font-mono text-slate-400 w-16">{formatTime(totalDuration)}</span>
               </div>
-              <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-1">
-                 <button onClick={() => setShowCaptions(!showCaptions)} className={`p-2 rounded text-xs font-medium flex items-center gap-2 ${showCaptions ? 'bg-slate-700 text-white' : 'text-slate-400'}`}><Captions className="w-4 h-4" /> Captions</button>
-                 <button onClick={() => setCinemaMode(!cinemaMode)} className={`p-2 rounded text-xs font-medium flex items-center gap-2 ${cinemaMode ? 'bg-slate-700 text-white' : 'text-slate-400'}`}><Tv className="w-4 h-4" /> Cinema</button>
-                 <button onClick={() => setShowVisualizer(!showVisualizer)} className={`p-2 rounded text-xs font-medium flex items-center gap-2 ${showVisualizer ? 'bg-slate-700 text-white' : 'text-slate-400'}`}><Activity className="w-4 h-4" /> Visualizer</button>
-              </div>
-              <div className="flex items-center gap-2">
-                 <button
-                    type="button"
-                    onClick={handleGenerateThumbnail}
-                    disabled={isRendering || normalizedTimeline.length === 0}
-                    className="px-3 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
-                    title="Generate YouTube Thumbnail"
-                 >
-                    <Camera className="w-4 h-4" />
-                    Thumbnail
-                 </button>
-                 <button
-                    type="button"
-                    onClick={handleCopyChapterMarkers}
-                    disabled={normalizedTimeline.length === 0}
-                    className="px-3 py-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
-                    title="Copy YouTube Chapter Markers"
-                 >
-                    <Download className="w-4 h-4" />
-                    Chapters
-                 </button>
-                 <div className="flex items-center gap-2 flex-wrap">
-                    {/* Platform Quick Presets */}
-                    <div className="flex items-center gap-1 bg-slate-900/50 p-1 rounded-lg border border-slate-800">
-                      <button
-                        type="button"
-                        onClick={() => setExportQuality('1080p')}
-                        disabled={isRendering}
-                        className={`px-2.5 py-1.5 text-xs font-medium rounded transition-all ${
-                          exportQuality === '1080p'
-                            ? 'bg-red-600 text-white shadow-lg'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                        }`}
-                        title="YouTube Standard (1920x1080)"
-                      >
-                        📺 YouTube
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setExportQuality('vertical')}
-                        disabled={isRendering}
-                        className={`px-2.5 py-1.5 text-xs font-medium rounded transition-all ${
-                          exportQuality === 'vertical'
-                            ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white shadow-lg'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                        }`}
-                        title="TikTok/Instagram Reels (1080x1920)"
-                      >
-                        📱 Shorts
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setExportQuality('4K')}
-                        disabled={isRendering}
-                        className={`px-2.5 py-1.5 text-xs font-medium rounded transition-all ${
-                          exportQuality === '4K'
-                            ? 'bg-gradient-to-r from-yellow-600 to-orange-600 text-white shadow-lg'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                        }`}
-                        title="4K Ultra HD (3840x2160)"
-                      >
-                        ✨ 4K
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setExportQuality('720p')}
-                        disabled={isRendering}
-                        className={`px-2.5 py-1.5 text-xs font-medium rounded transition-all ${
-                          exportQuality === '720p'
-                            ? 'bg-blue-600 text-white shadow-lg'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                        }`}
-                        title="720p HD (1280x720)"
-                      >
-                        ⚡ Fast
-                      </button>
-                    </div>
 
-                    <button type="button" onClick={handleRenderExport} disabled={isRendering} className={`px-5 py-2.5 rounded-lg font-bold text-white flex items-center gap-2 shadow-lg transition-transform hover:scale-105 ${isRendering ? 'bg-slate-700 cursor-wait' : 'bg-gradient-to-r from-blue-600 to-indigo-600'}`}>
-                      {isRendering ? <Loader2 className="w-5 h-5 animate-spin" /> : <Film className="w-5 h-5" />}
-                      Export {exportQuality === '1080p' ? 'for YouTube' : exportQuality === 'vertical' ? 'for Shorts' : exportQuality === '4K' ? '4K' : '720p'}
-                    </button>
+              <div className="flex items-center justify-between">
+                 <div className="flex items-center gap-2">
+                    <button onClick={() => setIsPlaying(!isPlaying)} disabled={isRendering} className="w-10 h-10 flex items-center justify-center bg-white text-black hover:bg-slate-200 rounded-full transition-colors" title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}>{isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}</button>
+                    <button onClick={() => { setIsPlaying(false); setCurrentTime(0); }} className="text-slate-400 hover:text-white p-2 hover:bg-slate-800 rounded transition-colors" title="Restart"><RotateCcw className="w-5 h-5" /></button>
+                    {audioFile && <button onClick={() => { if(audioRef.current) audioRef.current.muted = !audioRef.current.muted; setIsMuted(!isMuted); }} className={`p-2 hover:bg-slate-800 rounded transition-colors ${isMuted ? 'text-red-400' : 'text-slate-400 hover:text-white'}`} title={isMuted ? 'Unmute' : 'Mute'}>{isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}</button>}
+                 </div>
+
+                 <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-1">
+                    <button onClick={() => setShowCaptions(!showCaptions)} className={`px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-all ${showCaptions ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Toggle Captions"><Captions className="w-4 h-4" /> CC</button>
+                    <button onClick={() => setCinemaMode(!cinemaMode)} className={`px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-all ${cinemaMode ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Toggle Cinema Mode (Letterbox)"><Tv className="w-4 h-4" /></button>
+                    <button onClick={() => setShowVisualizer(!showVisualizer)} className={`px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-all ${showVisualizer ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Toggle Audio Visualizer"><Activity className="w-4 h-4" /></button>
                  </div>
               </div>
+           </div>
+
+           {/* Export Section */}
+           <div className="px-4 py-4 bg-slate-950/50 border-t border-slate-800">
+              <div className="flex items-center gap-3 mb-3">
+                 <Film className="w-5 h-5 text-indigo-400" />
+                 <h3 className="text-sm font-bold text-white uppercase tracking-wide">Export Your Documentary</h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                 {/* YouTube Tools */}
+                 <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-800">
+                    <label className="text-xs text-slate-400 mb-2 block font-medium">YouTube Tools</label>
+                    <div className="flex gap-2">
+                       <button
+                          type="button"
+                          onClick={handleGenerateThumbnail}
+                          disabled={isRendering || normalizedTimeline.length === 0}
+                          className="flex-1 px-3 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                          title="Generate 1280x720 YouTube thumbnail"
+                       >
+                          <Camera className="w-4 h-4" />
+                          Thumbnail
+                       </button>
+                       <button
+                          type="button"
+                          onClick={handleCopyChapterMarkers}
+                          disabled={normalizedTimeline.length === 0}
+                          className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                          title="Copy chapter timestamps for video description"
+                       >
+                          <Download className="w-4 h-4" />
+                          Chapters
+                       </button>
+                    </div>
+                 </div>
+
+                 {/* Export Quality */}
+                 <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-800">
+                    <label className="text-xs text-slate-400 mb-2 block font-medium">Platform & Quality</label>
+                    <div className="grid grid-cols-4 gap-1">
+                       <button
+                         type="button"
+                         onClick={() => setExportQuality('1080p')}
+                         disabled={isRendering}
+                         className={`px-2 py-2 text-xs font-medium rounded transition-all ${
+                           exportQuality === '1080p'
+                             ? 'bg-red-600 text-white shadow-lg'
+                             : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+                         }`}
+                         title="YouTube Standard (1920x1080, 12 Mbps)"
+                       >
+                         📺<br/>YouTube
+                       </button>
+                       <button
+                         type="button"
+                         onClick={() => setExportQuality('vertical')}
+                         disabled={isRendering}
+                         className={`px-2 py-2 text-xs font-medium rounded transition-all ${
+                           exportQuality === 'vertical'
+                             ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white shadow-lg'
+                             : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+                         }`}
+                         title="Vertical (1080x1920, 12 Mbps)"
+                       >
+                         📱<br/>Shorts
+                       </button>
+                       <button
+                         type="button"
+                         onClick={() => setExportQuality('4K')}
+                         disabled={isRendering}
+                         className={`px-2 py-2 text-xs font-medium rounded transition-all ${
+                           exportQuality === '4K'
+                             ? 'bg-gradient-to-r from-yellow-600 to-orange-600 text-white shadow-lg'
+                             : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+                         }`}
+                         title="4K Ultra HD (3840x2160, 25 Mbps)"
+                       >
+                         ✨<br/>4K
+                       </button>
+                       <button
+                         type="button"
+                         onClick={() => setExportQuality('720p')}
+                         disabled={isRendering}
+                         className={`px-2 py-2 text-xs font-medium rounded transition-all ${
+                           exportQuality === '720p'
+                             ? 'bg-blue-600 text-white shadow-lg'
+                             : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+                         }`}
+                         title="720p HD (1280x720, 8 Mbps)"
+                       >
+                         ⚡<br/>Fast
+                       </button>
+                    </div>
+                 </div>
+              </div>
+
+              {/* Big Export Button */}
+              <button
+                type="button"
+                onClick={handleRenderExport}
+                disabled={isRendering}
+                className={`w-full px-6 py-4 rounded-xl font-bold text-white flex items-center justify-center gap-3 shadow-xl transition-all ${
+                  isRendering
+                    ? 'bg-slate-700 cursor-wait'
+                    : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:shadow-2xl hover:scale-[1.02]'
+                }`}
+              >
+                {isRendering ? (
+                  <>
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span>Rendering... {renderProgress.toFixed(0)}%</span>
+                  </>
+                ) : (
+                  <>
+                    <Film className="w-6 h-6" />
+                    <span className="text-lg">
+                      Export {exportQuality === '1080p' ? 'for YouTube' : exportQuality === 'vertical' ? 'for Shorts' : exportQuality === '4K' ? 'in 4K' : 'Fast (720p)'}
+                    </span>
+                  </>
+                )}
+              </button>
            </div>
         </div>
       </div>
