@@ -267,13 +267,13 @@ const StoryBeatCard: React.FC<StoryBeatCardProps> = ({
                     <Rocket className="w-3 h-3" /> Pro
                  </button>
                  {onGenerateVideo && (
-                    <button 
+                    <button
                         onClick={() => onGenerateVideo(beat.id, beat.visual_prompt)}
                         disabled={beat.is_generating_image}
-                        className="flex-1 py-1.5 bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-white rounded text-[10px] font-bold flex items-center justify-center gap-1 transition-colors"
-                        title="Generate Video (Veo)"
+                        className="flex-1 py-1.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 disabled:opacity-50 text-white rounded text-[10px] font-bold flex items-center justify-center gap-1 transition-colors shadow-sm"
+                        title="Generate AI Image with Cinematic Motion (Ken Burns Effect)"
                     >
-                        <Video className="w-3 h-3" /> Veo
+                        <Video className="w-3 h-3" /> Motion
                     </button>
                  )}
             </div>

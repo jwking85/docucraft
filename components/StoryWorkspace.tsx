@@ -379,7 +379,7 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
         setBeats(prev => prev.map(b => b.id === beatId ? { ...b, selected_image_id: newImage.id, is_generating_image: false } : b));
     } catch (e: any) {
         if (e.message === "VEO_PAYWALL") {
-            setWarningMsg("Veo Video Model requires a paid Google Cloud project. Falling back to Cinematic Motion Image (Free).");
+            setWarningMsg("AI Video generation requires paid API. Using Cinematic Motion Image (Ken Burns effect) instead - Free!");
             try {
                 const base64Img = await generateImage(prompt, false);
                 const newImage: ProcessedImage = {
