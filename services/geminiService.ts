@@ -133,79 +133,89 @@ export const alignAudioToScript = async (audioFile: File, scriptSegments: { id: 
 };
 
 /**
- * Generates an image using Pollinations.ai (Free AI Image Generation)
- * This actually generates images based on the prompt using Stable Diffusion
+ * Generates an image by intelligently searching Unsplash with AI-extracted keywords
+ * Uses Gemini to extract the best search terms from the visual prompt
  */
 export const generateImage = async (prompt: string, useUltra: boolean = false): Promise<string> => {
   try {
-    // Enhanced prompt for better documentary-style images
-    const enhancedPrompt = useUltra
-      ? `cinematic documentary photography, ${prompt}, professional lighting, 4K, ultra detailed, photorealistic`
-      : `documentary style photography, ${prompt}, professional, high quality, realistic`;
+    // Use Gemini AI to extract the best 2-3 keywords for image search
+    if (process.env.API_KEY) {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-    // Use Pollinations.ai - free AI image generation using Stable Diffusion
-    // This actually understands prompts and generates relevant images
-    const encodedPrompt = encodeURIComponent(enhancedPrompt);
-    const seed = Math.floor(Math.random() * 1000000); // Random seed for variety
+      const keywordPrompt = `Extract 2-3 specific, visual keywords from this description that would work best for finding a relevant photograph on Unsplash. Return ONLY the keywords separated by commas, nothing else.
 
-    // Pollinations.ai free API - generates real AI images
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1920&height=1080&seed=${seed}&nologo=true`;
+Example:
+Input: "Cinematic low-angle shot of a classic 1980s Toys 'R' Us storefront at twilight"
+Output: toys r us storefront, 1980s retail, vintage toy store
 
-    // Verify the image loads
-    const response = await fetch(imageUrl, { method: 'HEAD' });
-    if (!response.ok) {
-      throw new Error('AI image generation failed');
+Input: "Archival black and white photo of Charles Lazarus in 1950s, standing proudly in his original Children's Bargain Town store"
+Output: 1950s businessman, vintage toy store interior, black white photo
+
+Now extract keywords from: "${prompt}"`;
+
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.0-flash',
+          contents: { parts: [{ text: keywordPrompt }] },
+          config: {
+            temperature: 0.3, // Lower temperature for more focused results
+            maxOutputTokens: 50
+          }
+        });
+
+        const keywords = response.text?.trim().replace(/['"]/g, '') || '';
+
+        if (keywords && keywords.length > 3) {
+          // Clean up the keywords
+          const cleanKeywords = keywords
+            .split(',')
+            .map(k => k.trim())
+            .filter(k => k.length > 0)
+            .join(',');
+
+          console.log(`AI extracted keywords: "${cleanKeywords}"`);
+
+          // Use Unsplash with AI-extracted keywords
+          const imageUrl = `https://source.unsplash.com/1920x1080/?${encodeURIComponent(cleanKeywords)}`;
+          return imageUrl;
+        }
+      } catch (aiError) {
+        console.error('Gemini keyword extraction failed:', aiError);
+      }
     }
 
-    return imageUrl;
+    // Fallback: Manual keyword extraction if AI fails
+    const keywords = prompt
+      .toLowerCase()
+      .replace(/cinematic|photo|shot|image|professional|detailed|quality|4k|photograph/gi, '')
+      .replace(/[^\w\s]/g, ' ')
+      .split(/\s+/)
+      .filter(word => word.length > 3)
+      .slice(0, 4)
+      .join(',');
+
+    if (keywords) {
+      console.log(`Fallback keywords: "${keywords}"`);
+      return `https://source.unsplash.com/1920x1080/?${encodeURIComponent(keywords)}`;
+    }
+
+    // Last resort
+    return `https://source.unsplash.com/1920x1080/?documentary,history`;
+
   } catch (error) {
-    console.error('AI image generation failed, trying fallback:', error);
-
-    // Fallback: Try Unsplash Source API with keyword extraction
-    try {
-      // Extract key words from prompt for better image search
-      const keywords = prompt
-        .toLowerCase()
-        .replace(/[^\w\s]/g, '')
-        .split(/\s+/)
-        .filter(word => word.length > 3)
-        .slice(0, 3)
-        .join(',');
-
-      const fallbackUrl = `https://source.unsplash.com/1920x1080/?${keywords || 'documentary'}`;
-      return fallbackUrl;
-    } catch {
-      // Last resort: Use a generic documentary-style placeholder
-      return `https://source.unsplash.com/1920x1080/?documentary,historical`;
-    }
+    console.error('Image generation error:', error);
+    return `https://source.unsplash.com/1920x1080/?documentary,history`;
   }
 };
 
 export const generateDocuVideo = async (prompt: string): Promise<string> => {
-  try {
-    // Enhanced prompt for better video results
-    const enhancedPrompt = `cinematic documentary footage, ${prompt}, professional camera work, smooth motion, high quality`;
-    const encodedPrompt = encodeURIComponent(enhancedPrompt);
+  // "Video" generation actually generates a still image with motion effect applied
+  // This is the same approach used by professional documentaries (Ken Burns effect)
+  console.log('Generating cinematic image for Ken Burns motion effect...');
 
-    // Use Pollinations.ai video generation (experimental)
-    // Note: This may take 10-30 seconds to generate
-    const videoUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1920&height=1080&seed=${Math.floor(Math.random() * 1000000)}&model=flux&enhance=true`;
-
-    // For now, Pollinations primarily does images, so we'll use a motion technique:
-    // Generate a high-quality AI image and apply Ken Burns effect (zoom/pan)
-    // This creates a "video-like" cinematic effect from still images
-
-    console.log('Video generation uses AI image with cinematic motion (Ken Burns effect)');
-    return videoUrl;
-
-  } catch (error) {
-    console.error('Video generation failed:', error);
-
-    // Fallback: Generate a still image that will have motion applied
-    // The timeline renderer will apply Ken Burns effect automatically
-    const fallbackPrompt = encodeURIComponent(`${prompt}, cinematic, wide angle, establishing shot`);
-    return `https://image.pollinations.ai/prompt/${fallbackPrompt}?width=1920&height=1080&nologo=true`;
-  }
+  // Use the same smart image generation with motion keywords added
+  const motionPrompt = `${prompt}, cinematic, wide angle, dramatic`;
+  return generateImage(motionPrompt, false);
 };
 
 export const analyzeImagesBatch = async (files: File[], scriptContext?: string): Promise<ImageAnalysis[]> => {
