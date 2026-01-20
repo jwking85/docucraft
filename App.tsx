@@ -4,6 +4,7 @@ import { AlertCircle, Loader2, ArrowRight, Save, Upload, Clapperboard, Lock, Unl
 import { ProcessedImage, AppStep, TimelineScene, ScriptType, ProjectFile } from './types';
 import StoryWorkspace from './components/StoryWorkspace';
 import TimelineView from './components/TimelineView';
+import QuickStartGuide from './components/QuickStartGuide';
 import { BackgroundMusicConfig } from './components/BackgroundMusicSelector';
 
 // Helpers for Base64 conversion
@@ -36,6 +37,7 @@ const App: React.FC = () => {
   const [backgroundMusic, setBackgroundMusic] = useState<BackgroundMusicConfig | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showQuickStart, setShowQuickStart] = useState(false);
   const loadInputRef = useRef<HTMLInputElement>(null);
 
   // Check for stored access on mount
@@ -43,6 +45,12 @@ const App: React.FC = () => {
     const hasAccess = localStorage.getItem("docucraft_access_granted");
     if (hasAccess === "true") {
       setIsLocked(false);
+    }
+
+    // Check if first time user
+    const hasSeenGuide = localStorage.getItem("docucraft_seen_guide");
+    if (!hasSeenGuide && hasAccess === "true") {
+      setShowQuickStart(true);
     }
   }, []);
 
@@ -377,57 +385,75 @@ const App: React.FC = () => {
           <div className="flex items-center gap-3 text-sm font-medium">
              {/* Save/Load Controls */}
              <div className="flex items-center bg-slate-900 rounded-md p-0.5 border border-slate-800 mr-2">
-                 <button 
-                    onClick={handleSaveProject} 
+                 <button
+                    onClick={handleSaveProject}
                     disabled={isSaving}
-                    className="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors"
+                    className="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors disabled:opacity-50"
+                    title="Save Project (Ctrl+S) - Saves all scenes, audio, and settings"
                  >
                      {isSaving ? <Loader2 className="w-3 h-3 animate-spin"/> : <Save className="w-3 h-3"/>}
-                     Save
+                     {isSaving ? 'Saving...' : 'Save'}
                  </button>
                  <div className="w-px h-3 bg-slate-800 mx-0.5"></div>
-                 <button 
+                 <button
                     onClick={() => loadInputRef.current?.click()}
                     disabled={isLoading}
-                    className="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors"
+                    className="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors disabled:opacity-50"
+                    title="Load Project - Import a previously saved project"
                  >
                      {isLoading ? <Loader2 className="w-3 h-3 animate-spin"/> : <Upload className="w-3 h-3"/>}
-                     Load
+                     {isLoading ? 'Loading...' : 'Load'}
                  </button>
                  <input type="file" ref={loadInputRef} onChange={handleLoadProject} accept=".json" className="hidden" />
              </div>
 
              <nav className="flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800">
-                 <button 
+                 <button
                    onClick={() => setStep(AppStep.WORKSPACE)}
-                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${step === AppStep.WORKSPACE ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${step === AppStep.WORKSPACE ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/50' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'}`}
+                   title="Create & Edit Documentary (Ctrl+Alt+1)"
                  >
-                   Workspace
+                   📝 Workspace
                  </button>
-                 <button 
+                 <button
                    onClick={() => setStep(AppStep.EXPORT)}
                    disabled={timeline.length === 0}
-                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${step === AppStep.EXPORT ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}
+                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${step === AppStep.EXPORT ? 'bg-purple-600 text-white shadow-sm shadow-purple-500/50' : timeline.length === 0 ? 'text-slate-600 cursor-not-allowed' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'}`}
+                   title={timeline.length === 0 ? 'Create a timeline first in Workspace' : 'Export & Render Video (Ctrl+Alt+2)'}
                  >
-                   Export
+                   🎬 Export {timeline.length > 0 && `(${timeline.length} scenes)`}
                  </button>
              </nav>
 
              <div className="w-px h-4 bg-slate-800 mx-1" />
 
              <button
+                onClick={() => setShowQuickStart(true)}
+                className="px-3 py-1.5 text-xs text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors font-medium"
+                title="Show Quick Start Guide"
+             >
+                💡 Help
+             </button>
+
+             <button
                 onClick={handleLock}
-                className="text-slate-500 hover:text-white transition-colors p-1"
-                title="Lock Studio"
+                className="text-slate-500 hover:text-white transition-colors p-1.5 hover:bg-slate-800 rounded"
+                title="Lock Studio (Require Password)"
              >
                 <Lock className="w-4 h-4" />
              </button>
-
-             <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white shadow-md">
-                AI
-             </div>
           </div>
       </header>
+
+      {/* Quick Start Guide */}
+      {showQuickStart && (
+        <QuickStartGuide
+          onClose={() => {
+            setShowQuickStart(false);
+            localStorage.setItem("docucraft_seen_guide", "true");
+          }}
+        />
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-hidden relative">
