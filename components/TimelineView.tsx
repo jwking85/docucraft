@@ -220,15 +220,16 @@ const TimelineView: React.FC<TimelineViewProps> = ({
            let src = imgName;
            let type: 'image' | 'video' = 'image';
 
+           let foundImage: ProcessedImage | undefined;
            if (!isGenerated) {
-                const found = images.find(img => img.file?.name === imgName || (img.file?.name && img.file.name.includes(imgName)));
-                if (found) {
-                    src = found.previewUrl;
-                    if (found.mediaType === 'video') type = 'video';
+                foundImage = images.find(img => img.file?.name === imgName || (img.file?.name && img.file.name.includes(imgName)));
+                if (foundImage) {
+                    src = foundImage.previewUrl;
+                    if (foundImage.mediaType === 'video') type = 'video';
                 }
            } else {
-               const found = images.find(img => img.previewUrl === imgName);
-               if (found && found.mediaType === 'video') type = 'video';
+               foundImage = images.find(img => img.previewUrl === imgName);
+               if (foundImage && foundImage.mediaType === 'video') type = 'video';
            }
 
            if (type === 'video') {
@@ -239,6 +240,13 @@ const TimelineView: React.FC<TimelineViewProps> = ({
                v.playsInline = true;
                // v.loop = true; // Loop is handled in render logic logic now
                v.crossOrigin = 'anonymous'; // Good practice for export
+
+               // Transfer trim metadata from file to video element
+               if (foundImage?.file && (foundImage.file as any).trimStart !== undefined) {
+                   (v as any).trimStart = (foundImage.file as any).trimStart;
+                   (v as any).trimEnd = (foundImage.file as any).trimEnd;
+               }
+
                v.load();
                
                // CRITICAL FIX: Append to hidden DOM to prevent browser background throttling
@@ -395,16 +403,22 @@ const TimelineView: React.FC<TimelineViewProps> = ({
     if (!media) return;
 
     if (media instanceof HTMLVideoElement) {
-        const videoDuration = media.duration || 10;
-        const videoTime = localTime % videoDuration;
-        
+        // Check for trim metadata
+        const trimStart = (media as any).trimStart || 0;
+        const trimEnd = (media as any).trimEnd || media.duration || 10;
+        const trimDuration = trimEnd - trimStart;
+
+        // Map the local time to the trimmed region
+        const videoTime = trimStart + (localTime % trimDuration);
+
         // --- VIDEO SYNC ---
         // During export, we rely on the loop's continuous play.
         // During preview (isPlaying), we keep it synced.
         if (isPlaying || isRendering) {
              if (media.paused) media.play().catch(() => {});
              // Only force seek if drift is significant (prevents stutter)
-             if (Math.abs(media.currentTime - videoTime) > 0.3) {
+             // Also ensure we stay within trim bounds
+             if (Math.abs(media.currentTime - videoTime) > 0.3 || media.currentTime >= trimEnd || media.currentTime < trimStart) {
                  media.currentTime = videoTime;
              }
         } else {

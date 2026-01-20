@@ -5,6 +5,7 @@ import { breakdownScript, generateImage, generateDocuVideo, generateVoiceover, a
 import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB } from '../constants';
 import StoryBeatCard from './StoryBeatCard';
 import VoiceRecorder from './VoiceRecorder';
+import VideoTrimmer from './VideoTrimmer';
 import { Sparkles, Layout, Loader2, ArrowRight, Mic, Music, Volume2, Info, AlertCircle, RefreshCw, CheckCircle2, RotateCcw, FileText, Radio } from 'lucide-react';
 
 interface StoryWorkspaceProps {
@@ -28,6 +29,8 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
   const [isSyncingAudio, setIsSyncingAudio] = useState(false);
   const [isAudioSynced, setIsAudioSynced] = useState(false);
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+  const [videoToTrim, setVideoToTrim] = useState<File | null>(null);
+  const [pendingBeatId, setPendingBeatId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
@@ -426,12 +429,22 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
           }
 
           const isVideo = file.type.startsWith('video');
+
+          // If video, open trimmer
+          if (isVideo) {
+              setVideoToTrim(file);
+              setPendingBeatId(activeUploadBeatId);
+              setActiveUploadBeatId(null);
+              return;
+          }
+
+          // If image, add directly
           const newImage: ProcessedImage = {
               id: `up-${Date.now()}`,
               file: file,
               previewUrl: URL.createObjectURL(file),
               source: 'upload',
-              mediaType: isVideo ? 'video' : 'image',
+              mediaType: 'image',
               isAnalyzing: true
           };
           setImages(prev => [...prev, newImage]);
@@ -440,6 +453,31 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
           setImages(prev => prev.map(i => i.id === newImage.id ? { ...i, isAnalyzing: false } : i));
       }
       setActiveUploadBeatId(null);
+  };
+
+  const handleVideoTrimComplete = (trimmedFile: File, startTime: number, endTime: number) => {
+      if (!pendingBeatId) return;
+
+      const newImage: ProcessedImage = {
+          id: `up-${Date.now()}`,
+          file: trimmedFile,
+          previewUrl: URL.createObjectURL(trimmedFile),
+          source: 'upload',
+          mediaType: 'video',
+          isAnalyzing: false
+      };
+
+      setImages(prev => [...prev, newImage]);
+      setBeats(prev => prev.map(b => b.id === pendingBeatId ? { ...b, selected_image_id: newImage.id } : b));
+
+      // Close trimmer
+      setVideoToTrim(null);
+      setPendingBeatId(null);
+  };
+
+  const handleVideoTrimCancel = () => {
+      setVideoToTrim(null);
+      setPendingBeatId(null);
   };
 
   const handleMotionChange = (beatId: string, motion: any) => {
@@ -492,6 +530,15 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full min-h-0">
       <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={handleFileChange} />
       <input type="file" ref={audioInputRef} className="hidden" accept="audio/*" onChange={handleAudioUpload} />
+
+      {/* Video Trimmer Modal */}
+      {videoToTrim && (
+        <VideoTrimmer
+          videoFile={videoToTrim}
+          onTrimComplete={handleVideoTrimComplete}
+          onCancel={handleVideoTrimCancel}
+        />
+      )}
 
       {warningMsg && (
         <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-4">
