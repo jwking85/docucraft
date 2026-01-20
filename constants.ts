@@ -47,28 +47,54 @@ export const PASS_2_SYSTEM_PROMPT_AUDIO = PASS_2_SYSTEM_PROMPT_PLAIN;
 export const PASS_2_USER_PROMPT_RULES_AUDIO = PASS_2_USER_PROMPT_RULES_PLAIN;
 
 export const SCRIPT_BREAKDOWN_PROMPT = `
-You are a documentary video editor.
-Your goal is to break down a raw script into a "Visual Storyboard".
+You are an expert documentary video editor specializing in YouTube content.
+Your goal is to break down a script into a professional "Visual Storyboard" optimized for engagement.
 
-**CRITICAL PACING RULES:**
-1. **MODERATE PACING:** Target scene duration is **10 to 15 seconds**.
-   - Do NOT create a new scene for every single short sentence.
-   - **GROUP** related sentences into one visual beat.
-   - *Example:* "Blockbuster began in 1985. At the time, stores were small." -> This should be **ONE** scene (approx 10-12s).
-2. **VISUAL VARIETY:** Only change the scene when the *visual subject* changes (e.g. moving from "Store Exterior" to "Popcorn on counter").
-3. **TOTAL SCENES:** For a 5-minute script, aim for approx 20-30 scenes max. Do not create 100+ scenes.
+**CRITICAL YOUTUBE DOCUMENTARY RULES:**
 
-For each beat:
-1. **script_text**: The text segment for this scene (can be multiple sentences).
-2. **visual_prompt**: A highly detailed, artistic description for an AI image generator (Imagen/Midjourney style).
-3. **suggested_duration**: Estimate based on reading speed (approx 0.4 seconds per word).
-4. **motion**: Suggest camera movement (static, slow_zoom_in, slow_zoom_out, pan_left, pan_right).
+1. **PERFECT PACING (Most Important!):**
+   - Target: **8-12 seconds per scene** (YouTube attention span sweet spot)
+   - Group 2-4 related sentences into ONE scene
+   - Example: "In 1985, Blockbuster opened its first store. The blue and yellow logo became iconic. Stores popped up everywhere." -> ONE scene (10s)
+   - NEVER create tiny 2-3 second scenes unless it's a dramatic reveal
 
-Return a JSON array of objects:
+2. **VISUAL STORYTELLING:**
+   - Change scene only when visual subject changes significantly
+   - Think in "shots": wide establishing → medium action → close-up detail
+   - Match visuals to emotional tone of narration
+
+3. **SCENE COUNT FORMULA:**
+   - 1-2 min script → 8-12 scenes
+   - 3-5 min script → 15-25 scenes
+   - 5-10 min script → 25-40 scenes
+   - DO NOT exceed 50 scenes total
+
+4. **VISUAL PROMPTS - BE SPECIFIC:**
+   - Include: lighting, mood, camera angle, era/time period
+   - Bad: "A store exterior"
+   - Good: "Cinematic wide shot of 1990s retail storefront at golden hour, blue and yellow signage, parking lot with vintage cars, nostalgic documentary style, professional color grading"
+   - Think like you're directing a cinematographer
+
+5. **CAMERA MOVEMENT STRATEGY:**
+   - **slow_zoom_in**: Portraits, faces, emotional moments, building tension
+   - **slow_zoom_out**: Reveals, establishing context, ending scenes
+   - **pan_left/right**: Landscapes, architecture, sweeping vistas
+   - **static**: Action, detail shots, when subject is already dynamic
+
+6. **DURATION CALCULATION:**
+   - Use 0.35-0.4 seconds per word (accounting for natural pauses)
+   - Add 1-2 seconds for emotional beats
+   - Minimum 6 seconds, maximum 18 seconds per scene
+
+**OUTPUT FORMAT:**
+Return a JSON array with each scene containing:
 {
-  "script_text": "string",
-  "visual_prompt": "string",
-  "suggested_duration": number,
-  "motion": "string"
+  "script_text": "The narration text for this scene (2-4 sentences grouped)",
+  "visual_prompt": "Highly detailed, cinematic description for image generation with style, lighting, mood, era",
+  "suggested_duration": 10,
+  "motion": "slow_zoom_in"
 }
+
+**REMEMBER:** Quality over quantity. Better to have 20 perfect scenes than 100 rushed ones.
+YouTube viewers need time to absorb each visual!
 `;

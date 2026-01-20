@@ -55,18 +55,60 @@ const App: React.FC = () => {
     };
   }, [images]);
 
-  // Keyboard shortcut for save (Ctrl+S / Cmd+S)
+  // Enhanced keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Save: Ctrl+S / Cmd+S
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         handleSaveProject();
+      }
+      // Switch to Workspace: Alt+1
+      if (e.altKey && e.key === '1') {
+        e.preventDefault();
+        setStep(AppStep.WORKSPACE);
+      }
+      // Switch to Export: Alt+2
+      if (e.altKey && e.key === '2') {
+        e.preventDefault();
+        if (timeline.length > 0) setStep(AppStep.EXPORT);
+      }
+      // Play/Pause in Export view: Space (when not in input)
+      if (e.key === ' ' && step === AppStep.EXPORT && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault();
+        // Will be handled by TimelineView
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [images, timeline, currentAudioFile]);
+  }, [images, timeline, currentAudioFile, step]);
+
+  // Auto-save to localStorage every 30 seconds
+  useEffect(() => {
+    if (isLocked || (timeline.length === 0 && images.length === 0)) return;
+
+    const autoSaveInterval = setInterval(() => {
+      try {
+        const autoSaveData = {
+          timestamp: Date.now(),
+          timeline,
+          images: images.map(img => ({
+            id: img.id,
+            previewUrl: img.previewUrl,
+            source: img.source,
+            mediaType: img.mediaType
+          }))
+        };
+        localStorage.setItem('docucraft_autosave', JSON.stringify(autoSaveData));
+        console.log('Auto-saved project');
+      } catch (err) {
+        console.error('Auto-save failed:', err);
+      }
+    }, 30000); // Every 30 seconds
+
+    return () => clearInterval(autoSaveInterval);
+  }, [timeline, images, isLocked]);
 
   // Auth State (API Key)
   const [hasApiKey, setHasApiKey] = useState(false);
