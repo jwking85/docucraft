@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { createClient } from 'pexels';
+import Replicate from 'replicate';
 import {
   PASS_1_SYSTEM_PROMPT,
   PASS_1_USER_PROMPT_PREFIX,
@@ -134,127 +135,108 @@ export const alignAudioToScript = async (audioFile: File, scriptSegments: { id: 
 };
 
 /**
- * Generates an image using Pexels API with AI-powered search query extraction
- * This is a professional, reliable solution used by real video editing tools
+ * Generates an image using REAL AI image generation (Replicate - FLUX model)
+ * This creates custom images from scratch like ChatGPT/DALL-E
  */
-export const generateImage = async (prompt: string, _useUltra: boolean = false): Promise<string> => {
+export const generateImage = async (prompt: string, useUltra: boolean = false): Promise<string> => {
+  console.log(`🎨 Generating AI image for: "${prompt.substring(0, 100)}..."`);
+
   try {
-    // Step 1: Use Gemini AI to create a perfect search query
+    // Try Replicate AI image generation first (REAL AI like ChatGPT)
+    const REPLICATE_API_KEY = process.env.REPLICATE_API_KEY;
+
+    if (REPLICATE_API_KEY && REPLICATE_API_KEY.length > 20) {
+      try {
+        console.log('🚀 Using Replicate AI image generation (FLUX model)...');
+
+        const replicate = new Replicate({
+          auth: REPLICATE_API_KEY,
+        });
+
+        // Enhanced prompt for documentary style
+        const enhancedPrompt = useUltra
+          ? `professional documentary photograph, ${prompt}, cinematic lighting, highly detailed, photorealistic, 4K quality, sharp focus`
+          : `documentary style photograph, ${prompt}, professional photography, high quality, realistic`;
+
+        console.log(`📝 Enhanced prompt: "${enhancedPrompt.substring(0, 100)}..."`);
+
+        // Run FLUX model (fast, high-quality AI image generation)
+        const output = await replicate.run(
+          "black-forest-labs/flux-schnell",
+          {
+            input: {
+              prompt: enhancedPrompt,
+              num_outputs: 1,
+              aspect_ratio: "16:9",
+              output_format: "jpg",
+              output_quality: 90
+            }
+          }
+        );
+
+        if (output && Array.isArray(output) && output.length > 0) {
+          const imageUrl = output[0];
+          console.log(`✅ AI generated image: ${imageUrl}`);
+          return imageUrl;
+        }
+
+        throw new Error('No output from Replicate');
+
+      } catch (replicateError: any) {
+        console.error('❌ Replicate AI generation failed:', replicateError.message);
+        console.log('⚠️ Falling back to Pexels search...');
+      }
+    } else {
+      console.log('⚠️ No Replicate API key - falling back to Pexels search');
+    }
+
+    // Fallback to Pexels search (stock photos)
     if (!process.env.API_KEY) {
       throw new Error("API_KEY missing");
     }
 
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-    const queryPrompt = `You are a search query expert. Convert this visual description into a SHORT, SPECIFIC search query (3-5 words max) that will find the exact type of photo described.
-
-Rules:
-- Focus on the MAIN SUBJECT only
-- Be specific about what's visible in the photo
-- Remove artistic descriptions (cinematic, shot, etc.)
-- Keep it simple and searchable
-
-Examples:
-Input: "Cinematic wide establishing shot of a bustling Pizza Hut interior, circa 1985 at night"
-Output: pizza hut restaurant interior
-
-Input: "Medium shot of a Pac-Man arcade game blinking in a dimly lit corner of Pizza Hut in 1985"
-Output: retro arcade game
-
-Input: "Archival black and white photo of Charles Lazarus in 1950s standing in toy store"
-Output: 1950s man suit retail store
-
-Input: "1980s Toys 'R' Us storefront at twilight with glowing windows"
-Output: 1980s toy store exterior
-
-Now convert this: "${prompt}"
-Output:`;
+    // Extract search keywords
+    const keywordPrompt = `Extract 2-3 specific keywords from this: "${prompt}". Return ONLY keywords separated by spaces, nothing else.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.0-flash',
-      contents: { parts: [{ text: queryPrompt }] },
-      config: {
-        temperature: 0.2,
-        maxOutputTokens: 30
-      }
+      contents: { parts: [{ text: keywordPrompt }] },
+      config: { temperature: 0.2, maxOutputTokens: 20 }
     });
 
-    let searchQuery = response.text?.trim().replace(/['"]/g, '').replace(/^Output:\s*/i, '') || '';
+    const searchQuery = response.text?.trim().replace(/['"]/g, '') || 'documentary';
 
-    console.log(`🔍 AI search query: "${searchQuery}"`);
+    console.log(`🔍 Searching Pexels for: "${searchQuery}"`);
 
-    // Step 2: Use Pexels API to search with that query
-    const PEXELS_API_KEY = process.env.PEXELS_API_KEY;
+    const PEXELS_API_KEY = process.env.PEXELS_API_KEY || 'rnbyBaGQ1EZPwtsoJjqi3sdBIdli3Yvt2uVhPMtaY9Dj7zhzYh9Ob6cb';
 
-    if (PEXELS_API_KEY && PEXELS_API_KEY.length > 20) {
-      try {
-        console.log(`🔍 Searching Pexels for: "${searchQuery}"`);
-        const pexelsClient = createClient(PEXELS_API_KEY);
+    const pexelsClient = createClient(PEXELS_API_KEY);
 
-        const pexelsResponse = await pexelsClient.photos.search({
-          query: searchQuery,
-          per_page: 10,
-          orientation: 'landscape',
-          size: 'large'
-        });
+    const pexelsResponse = await pexelsClient.photos.search({
+      query: searchQuery,
+      per_page: 10,
+      orientation: 'landscape'
+    });
 
-        console.log(`📊 Pexels returned ${('photos' in pexelsResponse && pexelsResponse.photos) ? pexelsResponse.photos.length : 0} results`);
-
-        if ('photos' in pexelsResponse && pexelsResponse.photos && pexelsResponse.photos.length > 0) {
-          // Get first photo (most relevant) or random from top 3
-          const randomIndex = Math.floor(Math.random() * Math.min(pexelsResponse.photos.length, 3));
-          const photo = pexelsResponse.photos[randomIndex];
-
-          // Add cache busting timestamp to force fresh load
-          const imageUrl = `${photo.src.large2x || photo.src.large}?cachebust=${Date.now()}`;
-
-          console.log(`✅ Selected: "${photo.alt || 'No description'}"`);
-          console.log(`🖼️ URL: ${imageUrl}`);
-          return imageUrl;
-        }
-
-        console.log('No Pexels results, trying fallback query...');
-
-        // Fallback: Try a more general query
-        const fallbackQuery = searchQuery.split(' ').slice(0, 2).join(' ');
-        const fallbackResponse = await pexelsClient.photos.search({
-          query: fallbackQuery,
-          per_page: 5,
-          orientation: 'landscape'
-        });
-
-        if ('photos' in fallbackResponse && fallbackResponse.photos && fallbackResponse.photos.length > 0) {
-          const photo = fallbackResponse.photos[0];
-          console.log(`✅ Pexels fallback found: ${photo.src.large}`);
-          return photo.src.large2x || photo.src.large;
-        }
-      } catch (pexelsError: any) {
-        console.error('Pexels API error:', pexelsError.message);
-        // Continue to Unsplash fallback
-      }
-    } else {
-      console.log('⚠️ No valid Pexels API key - using Unsplash fallback');
+    if ('photos' in pexelsResponse && pexelsResponse.photos && pexelsResponse.photos.length > 0) {
+      const photo = pexelsResponse.photos[0];
+      const imageUrl = `${photo.src.large2x || photo.src.large}?t=${Date.now()}`;
+      console.log(`✅ Pexels found: ${photo.alt}`);
+      return imageUrl;
     }
 
-    // Fallback: Use Unsplash with AI-optimized keywords
-    const cleanQuery = searchQuery.replace(/[^\w\s]/g, ' ').split(/\s+/).join(',');
-    const unsplashUrl = `https://source.unsplash.com/1920x1080/?${encodeURIComponent(cleanQuery)}`;
-    console.log(`🔄 Using Unsplash: ${unsplashUrl}`);
-    return unsplashUrl;
+    throw new Error('No results from Pexels');
 
-  } catch (error) {
-    console.error('Image generation error:', error);
+  } catch (error: any) {
+    console.error('❌ All image generation failed:', error.message);
 
-    // Ultimate fallback: Generic Unsplash
-    const simpleKeywords = prompt
-      .toLowerCase()
-      .replace(/[^\w\s]/g, ' ')
-      .split(/\s+/)
-      .filter(w => w.length > 4)
-      .slice(0, 3)
-      .join(',');
-
-    return `https://source.unsplash.com/1920x1080/?${encodeURIComponent(simpleKeywords || 'documentary')}`;
+    // Last resort: Unsplash
+    const keywords = prompt.toLowerCase().split(' ').filter(w => w.length > 4).slice(0, 3).join(',');
+    const fallbackUrl = `https://source.unsplash.com/1920x1080/?${encodeURIComponent(keywords || 'documentary')}`;
+    console.log(`🔄 Using Unsplash fallback: ${fallbackUrl}`);
+    return fallbackUrl;
   }
 };
 

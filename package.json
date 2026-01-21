@@ -13,7 +13,8 @@
     "lucide-react": "^0.562.0",
     "pexels": "^1.4.0",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "react-dom": "^19.2.3",
+    "replicate": "^1.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

@@ -14,7 +14,11 @@
       "Bash(git commit:*)",
       "Bash(curl:*)",
       "Bash(npm run dev:*)",
-      "Bash(npm search:*)"
+      "Bash(npm search:*)",
+      "Bash(Get-Process -Name node -ErrorAction SilentlyContinue)",
+      "Bash(Stop-Process -Force)",
+      "Bash(echo:*)",
+      "Bash(node -e:*)"
     ],
     "deny": [],
     "ask": []
