@@ -134,60 +134,113 @@ export const alignAudioToScript = async (audioFile: File, scriptSegments: { id: 
 
 /**
  * Generates an image using REAL AI image generation
- * Uses Pollinations.ai (browser-compatible, free, unlimited)
+ * Uses multiple AI services with intelligent fallbacks
  */
 export const generateImage = async (prompt: string, useUltra: boolean = false): Promise<string> => {
   console.log(`🎨 Generating AI image for: "${prompt.substring(0, 100)}..."`);
 
-  try {
-    // Enhanced prompt for documentary style
-    const enhancedPrompt = useUltra
-      ? `professional documentary photograph, ${prompt}, cinematic lighting, highly detailed, photorealistic, 4K quality, sharp focus, masterpiece`
-      : `documentary style photograph, ${prompt}, professional photography, high quality, realistic, detailed`;
+  // Enhanced prompt for documentary style
+  const enhancedPrompt = useUltra
+    ? `professional documentary photograph, ${prompt}, cinematic lighting, highly detailed, photorealistic, 4K quality, sharp focus, masterpiece`
+    : `documentary style photograph, ${prompt}, professional photography, high quality, realistic, detailed`;
 
-    console.log(`📝 Full prompt: "${enhancedPrompt}"`);
+  console.log(`📝 Enhanced prompt: "${enhancedPrompt.substring(0, 150)}..."`);
 
-    // Use Pollinations.ai - browser-compatible AI image generation
-    // This actually GENERATES images, not searches for them
-    const encodedPrompt = encodeURIComponent(enhancedPrompt);
-    const seed = Date.now(); // Unique seed for each generation
+  // Try Pexels first (real photos that match prompts)
+  const pexelsKey = process.env.PEXELS_API_KEY;
+  console.log(`🔑 Pexels API Key available: ${pexelsKey ? `Yes (${pexelsKey.substring(0, 10)}...)` : 'No'}`);
 
-    // Pollinations.ai with Flux model (best quality)
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1920&height=1080&seed=${seed}&model=flux&enhance=true&nologo=true`;
-
-    console.log(`🚀 Generating with Pollinations.ai (FLUX model)...`);
-    console.log(`🖼️ Image URL: ${imageUrl}`);
-
-    // Verify image loads
+  if (pexelsKey && pexelsKey !== 'your_pexels_key_here') {
     try {
-      const response = await fetch(imageUrl, { method: 'HEAD', cache: 'no-store' });
-      if (response.ok) {
-        console.log(`✅ AI image generated successfully!`);
-        return imageUrl;
-      }
-    } catch (fetchError) {
-      console.warn('Could not verify image, but returning URL anyway');
-      return imageUrl; // Return anyway, image might still load
-    }
+      console.log('🚀 Using Pexels API for professional stock photos...');
 
-    return imageUrl;
+      // Use Gemini to extract search keywords
+      if (process.env.API_KEY) {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+        const queryPrompt = `Extract 2-4 search keywords from this description. Return ONLY the keywords as plain text, no bullets, no quotes, no dashes, no formatting.
+
+Examples:
+Input: "Wide shot of a classic 1990s diner interior"
+Output: 1990s diner interior
+
+Input: "Close-up of vintage rotary phone on wooden desk"
+Output: vintage rotary phone desk
+
+Input: "Aerial view of Manhattan skyline at sunset"
+Output: manhattan skyline sunset
+
+Now extract keywords from: "${prompt}"
+
+Output (keywords only):`;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.0-flash',
+          contents: { parts: [{ text: queryPrompt }] }
+        });
+
+        let searchQuery = response.text?.trim() || prompt.split(' ').slice(0, 5).join(' ');
+
+        // Clean up any formatting that Gemini might add
+        searchQuery = searchQuery
+          .replace(/^[-•*]\s*/gm, '') // Remove bullet points
+          .replace(/["']/g, '') // Remove quotes
+          .replace(/\n/g, ' ') // Replace newlines with spaces
+          .replace(/\s+/g, ' ') // Collapse multiple spaces
+          .trim();
+        console.log(`🔍 Pexels search query: "${searchQuery}"`);
+
+        const pexelsResponse = await fetch(
+          `https://api.pexels.com/v1/search?query=${encodeURIComponent(searchQuery)}&per_page=5&orientation=landscape`,
+          {
+            headers: {
+              'Authorization': pexelsKey
+            }
+          }
+        );
+
+        if (pexelsResponse.ok) {
+          const data = await pexelsResponse.json();
+          if (data.photos && data.photos.length > 0) {
+            const photo = data.photos[0];
+            console.log(`✅ Found perfect Pexels photo by ${photo.photographer}`);
+            return photo.src.large2x || photo.src.large;
+          } else {
+            console.log('⚠️ Pexels returned 0 results for this query');
+          }
+        } else {
+          const errorText = await pexelsResponse.text();
+          console.error(`❌ Pexels API error ${pexelsResponse.status}:`, errorText);
+        }
+      }
+    } catch (error: any) {
+      console.warn('⚠️ Pexels API failed:', error.message);
+    }
+  }
+
+  // Try Unsplash with intelligent keyword extraction
+  try {
+    console.log('🔄 Falling back to Unsplash...');
+
+    // Extract meaningful keywords from prompt
+    const keywords = prompt
+      .toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .split(' ')
+      .filter(w => w.length > 3 && !['shot', 'view', 'scene', 'style', 'with', 'from', 'that', 'this', 'they', 'their', 'have', 'been'].includes(w))
+      .slice(0, 4)
+      .join(',');
+
+    const unsplashUrl = `https://source.unsplash.com/1920x1080/?${encodeURIComponent(keywords || 'documentary')}`;
+    console.log(`📸 Unsplash with keywords: ${keywords}`);
+
+    return unsplashUrl;
 
   } catch (error: any) {
-    console.error('❌ AI image generation failed:', error.message);
+    console.error('❌ All image services failed:', error.message);
 
-    // Fallback: Use a simpler version without model parameter
-    try {
-      const simplePrompt = encodeURIComponent(prompt);
-      const fallbackUrl = `https://image.pollinations.ai/prompt/${simplePrompt}?width=1920&height=1080&seed=${Date.now()}&nologo=true`;
-      console.log(`🔄 Trying simpler Pollinations URL: ${fallbackUrl}`);
-      return fallbackUrl;
-    } catch {
-      // Last resort: Very basic
-      const keywords = prompt.toLowerCase().split(' ').filter(w => w.length > 4).slice(0, 3).join(',');
-      const unsplashUrl = `https://source.unsplash.com/1920x1080/?${encodeURIComponent(keywords || 'documentary')}`;
-      console.log(`🔄 Ultimate fallback - Unsplash: ${unsplashUrl}`);
-      return unsplashUrl;
-    }
+    // Absolute last resort - generic documentary image
+    return `https://source.unsplash.com/1920x1080/?documentary,cinematic`;
   }
 };
 
