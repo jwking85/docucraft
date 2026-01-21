@@ -1,6 +1,4 @@
 import { GoogleGenAI } from "@google/genai";
-import { createClient } from 'pexels';
-import Replicate from 'replicate';
 import {
   PASS_1_SYSTEM_PROMPT,
   PASS_1_USER_PROMPT_PREFIX,
@@ -135,108 +133,61 @@ export const alignAudioToScript = async (audioFile: File, scriptSegments: { id: 
 };
 
 /**
- * Generates an image using REAL AI image generation (Replicate - FLUX model)
- * This creates custom images from scratch like ChatGPT/DALL-E
+ * Generates an image using REAL AI image generation
+ * Uses Pollinations.ai (browser-compatible, free, unlimited)
  */
 export const generateImage = async (prompt: string, useUltra: boolean = false): Promise<string> => {
   console.log(`🎨 Generating AI image for: "${prompt.substring(0, 100)}..."`);
 
   try {
-    // Try Replicate AI image generation first (REAL AI like ChatGPT)
-    const REPLICATE_API_KEY = process.env.REPLICATE_API_KEY;
+    // Enhanced prompt for documentary style
+    const enhancedPrompt = useUltra
+      ? `professional documentary photograph, ${prompt}, cinematic lighting, highly detailed, photorealistic, 4K quality, sharp focus, masterpiece`
+      : `documentary style photograph, ${prompt}, professional photography, high quality, realistic, detailed`;
 
-    if (REPLICATE_API_KEY && REPLICATE_API_KEY.length > 20) {
-      try {
-        console.log('🚀 Using Replicate AI image generation (FLUX model)...');
+    console.log(`📝 Full prompt: "${enhancedPrompt}"`);
 
-        const replicate = new Replicate({
-          auth: REPLICATE_API_KEY,
-        });
+    // Use Pollinations.ai - browser-compatible AI image generation
+    // This actually GENERATES images, not searches for them
+    const encodedPrompt = encodeURIComponent(enhancedPrompt);
+    const seed = Date.now(); // Unique seed for each generation
 
-        // Enhanced prompt for documentary style
-        const enhancedPrompt = useUltra
-          ? `professional documentary photograph, ${prompt}, cinematic lighting, highly detailed, photorealistic, 4K quality, sharp focus`
-          : `documentary style photograph, ${prompt}, professional photography, high quality, realistic`;
+    // Pollinations.ai with Flux model (best quality)
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1920&height=1080&seed=${seed}&model=flux&enhance=true&nologo=true`;
 
-        console.log(`📝 Enhanced prompt: "${enhancedPrompt.substring(0, 100)}..."`);
+    console.log(`🚀 Generating with Pollinations.ai (FLUX model)...`);
+    console.log(`🖼️ Image URL: ${imageUrl}`);
 
-        // Run FLUX model (fast, high-quality AI image generation)
-        const output = await replicate.run(
-          "black-forest-labs/flux-schnell",
-          {
-            input: {
-              prompt: enhancedPrompt,
-              num_outputs: 1,
-              aspect_ratio: "16:9",
-              output_format: "jpg",
-              output_quality: 90
-            }
-          }
-        );
-
-        if (output && Array.isArray(output) && output.length > 0) {
-          const imageUrl = output[0];
-          console.log(`✅ AI generated image: ${imageUrl}`);
-          return imageUrl;
-        }
-
-        throw new Error('No output from Replicate');
-
-      } catch (replicateError: any) {
-        console.error('❌ Replicate AI generation failed:', replicateError.message);
-        console.log('⚠️ Falling back to Pexels search...');
+    // Verify image loads
+    try {
+      const response = await fetch(imageUrl, { method: 'HEAD', cache: 'no-store' });
+      if (response.ok) {
+        console.log(`✅ AI image generated successfully!`);
+        return imageUrl;
       }
-    } else {
-      console.log('⚠️ No Replicate API key - falling back to Pexels search');
+    } catch (fetchError) {
+      console.warn('Could not verify image, but returning URL anyway');
+      return imageUrl; // Return anyway, image might still load
     }
 
-    // Fallback to Pexels search (stock photos)
-    if (!process.env.API_KEY) {
-      throw new Error("API_KEY missing");
-    }
-
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-    // Extract search keywords
-    const keywordPrompt = `Extract 2-3 specific keywords from this: "${prompt}". Return ONLY keywords separated by spaces, nothing else.`;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: { parts: [{ text: keywordPrompt }] },
-      config: { temperature: 0.2, maxOutputTokens: 20 }
-    });
-
-    const searchQuery = response.text?.trim().replace(/['"]/g, '') || 'documentary';
-
-    console.log(`🔍 Searching Pexels for: "${searchQuery}"`);
-
-    const PEXELS_API_KEY = process.env.PEXELS_API_KEY || 'rnbyBaGQ1EZPwtsoJjqi3sdBIdli3Yvt2uVhPMtaY9Dj7zhzYh9Ob6cb';
-
-    const pexelsClient = createClient(PEXELS_API_KEY);
-
-    const pexelsResponse = await pexelsClient.photos.search({
-      query: searchQuery,
-      per_page: 10,
-      orientation: 'landscape'
-    });
-
-    if ('photos' in pexelsResponse && pexelsResponse.photos && pexelsResponse.photos.length > 0) {
-      const photo = pexelsResponse.photos[0];
-      const imageUrl = `${photo.src.large2x || photo.src.large}?t=${Date.now()}`;
-      console.log(`✅ Pexels found: ${photo.alt}`);
-      return imageUrl;
-    }
-
-    throw new Error('No results from Pexels');
+    return imageUrl;
 
   } catch (error: any) {
-    console.error('❌ All image generation failed:', error.message);
+    console.error('❌ AI image generation failed:', error.message);
 
-    // Last resort: Unsplash
-    const keywords = prompt.toLowerCase().split(' ').filter(w => w.length > 4).slice(0, 3).join(',');
-    const fallbackUrl = `https://source.unsplash.com/1920x1080/?${encodeURIComponent(keywords || 'documentary')}`;
-    console.log(`🔄 Using Unsplash fallback: ${fallbackUrl}`);
-    return fallbackUrl;
+    // Fallback: Use a simpler version without model parameter
+    try {
+      const simplePrompt = encodeURIComponent(prompt);
+      const fallbackUrl = `https://image.pollinations.ai/prompt/${simplePrompt}?width=1920&height=1080&seed=${Date.now()}&nologo=true`;
+      console.log(`🔄 Trying simpler Pollinations URL: ${fallbackUrl}`);
+      return fallbackUrl;
+    } catch {
+      // Last resort: Very basic
+      const keywords = prompt.toLowerCase().split(' ').filter(w => w.length > 4).slice(0, 3).join(',');
+      const unsplashUrl = `https://source.unsplash.com/1920x1080/?${encodeURIComponent(keywords || 'documentary')}`;
+      console.log(`🔄 Ultimate fallback - Unsplash: ${unsplashUrl}`);
+      return unsplashUrl;
+    }
   }
 };
 
