@@ -188,22 +188,28 @@ Output:`;
 
     if (PEXELS_API_KEY && PEXELS_API_KEY.length > 20) {
       try {
+        console.log(`🔍 Searching Pexels for: "${searchQuery}"`);
         const pexelsClient = createClient(PEXELS_API_KEY);
 
         const pexelsResponse = await pexelsClient.photos.search({
           query: searchQuery,
-          per_page: 5,
+          per_page: 10,
           orientation: 'landscape',
           size: 'large'
         });
 
-        if ('photos' in pexelsResponse && pexelsResponse.photos && pexelsResponse.photos.length > 0) {
-          // Get random photo from top 5 results for variety
-          const randomIndex = Math.floor(Math.random() * Math.min(pexelsResponse.photos.length, 5));
-          const photo = pexelsResponse.photos[randomIndex];
-          const imageUrl = photo.src.large2x || photo.src.large;
+        console.log(`📊 Pexels returned ${('photos' in pexelsResponse && pexelsResponse.photos) ? pexelsResponse.photos.length : 0} results`);
 
-          console.log(`✅ Pexels found: ${imageUrl}`);
+        if ('photos' in pexelsResponse && pexelsResponse.photos && pexelsResponse.photos.length > 0) {
+          // Get first photo (most relevant) or random from top 3
+          const randomIndex = Math.floor(Math.random() * Math.min(pexelsResponse.photos.length, 3));
+          const photo = pexelsResponse.photos[randomIndex];
+
+          // Add cache busting timestamp to force fresh load
+          const imageUrl = `${photo.src.large2x || photo.src.large}?cachebust=${Date.now()}`;
+
+          console.log(`✅ Selected: "${photo.alt || 'No description'}"`);
+          console.log(`🖼️ URL: ${imageUrl}`);
           return imageUrl;
         }
 
