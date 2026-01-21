@@ -158,11 +158,14 @@ export const generateImage = async (prompt: string, useUltra: boolean = false): 
       if (process.env.API_KEY) {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-        const queryPrompt = `Extract 2-4 search keywords from this description. Return ONLY the keywords as plain text, no bullets, no quotes, no dashes, no formatting.
+        // Pro mode: Add style keywords for more dramatic/professional results
+        const styleHint = useUltra ? ' cinematic professional dramatic lighting' : '';
+
+        const queryPrompt = `You are a stock photo search expert. Extract the MAIN SUBJECT and SETTING from this scene description. Focus on what would appear in a photograph, ignore actions/emotions.
 
 Examples:
-Input: "Wide shot of a classic 1990s diner interior"
-Output: 1990s diner interior
+Input: "Wide shot of a classic 1990s diner interior with people eating"
+Output: diner interior 1990s
 
 Input: "Close-up of vintage rotary phone on wooden desk"
 Output: vintage rotary phone desk
@@ -170,9 +173,12 @@ Output: vintage rotary phone desk
 Input: "Aerial view of Manhattan skyline at sunset"
 Output: manhattan skyline sunset
 
+Input: "Dimly lit sports bar at night, 1990s aesthetic, beer bottles"
+Output: sports bar interior dim lighting
+
 Now extract keywords from: "${prompt}"
 
-Output (keywords only):`;
+Return ONLY 3-5 keywords describing the main subject and setting. No bullets, quotes, or formatting:`;
 
         const response = await ai.models.generateContent({
           model: 'gemini-2.0-flash',
@@ -188,10 +194,17 @@ Output (keywords only):`;
           .replace(/\n/g, ' ') // Replace newlines with spaces
           .replace(/\s+/g, ' ') // Collapse multiple spaces
           .trim();
-        console.log(`🔍 Pexels search query: "${searchQuery}"`);
+
+        // Add style hint for Pro mode
+        searchQuery = searchQuery + styleHint;
+
+        console.log(`🔍 Pexels search query (${useUltra ? 'PRO' : 'STD'}): "${searchQuery}"`);
+
+        // Pro mode: Skip first result for variety
+        const skipResults = useUltra ? 1 : 0;
 
         const pexelsResponse = await fetch(
-          `https://api.pexels.com/v1/search?query=${encodeURIComponent(searchQuery)}&per_page=5&orientation=landscape`,
+          `https://api.pexels.com/v1/search?query=${encodeURIComponent(searchQuery)}&per_page=${5 + skipResults}&orientation=landscape`,
           {
             headers: {
               'Authorization': pexelsKey
@@ -201,9 +214,9 @@ Output (keywords only):`;
 
         if (pexelsResponse.ok) {
           const data = await pexelsResponse.json();
-          if (data.photos && data.photos.length > 0) {
-            const photo = data.photos[0];
-            console.log(`✅ Found perfect Pexels photo by ${photo.photographer}`);
+          if (data.photos && data.photos.length > skipResults) {
+            const photo = data.photos[skipResults]; // Skip first result for Pro
+            console.log(`✅ Found perfect Pexels photo by ${photo.photographer} (${useUltra ? 'PRO' : 'STD'})`);
             return photo.src.large2x || photo.src.large;
           } else {
             console.log('⚠️ Pexels returned 0 results for this query');
@@ -247,11 +260,12 @@ Output (keywords only):`;
 export const generateDocuVideo = async (prompt: string): Promise<string> => {
   // "Video" generation actually generates a still image with motion effect applied
   // This is the same approach used by professional documentaries (Ken Burns effect)
-  console.log('Generating cinematic image for Ken Burns motion effect...');
+  console.log('🎬 Generating MOTION image for Ken Burns effect...');
 
   // Use the same smart image generation with motion keywords added
-  const motionPrompt = `${prompt}, cinematic, wide angle, dramatic`;
-  return generateImage(motionPrompt, false);
+  // Motion needs wide, dynamic shots that work well with pan/zoom
+  const motionPrompt = `${prompt}, cinematic wide angle, dynamic composition, epic dramatic`;
+  return generateImage(motionPrompt, true); // Use ultra mode for better quality
 };
 
 export const analyzeImagesBatch = async (files: File[], scriptContext?: string): Promise<ImageAnalysis[]> => {
