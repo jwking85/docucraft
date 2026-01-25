@@ -72,36 +72,76 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
   const distributeAudioTimings = (currentBeats: StoryBeat[], totalDuration: number): StoryBeat[] => {
       if (!totalDuration || totalDuration <= 0) return currentBeats;
 
-      const totalChars = currentBeats.reduce((sum, b) => sum + (b.script_text?.length || 0), 0);
-      if (totalChars === 0) return currentBeats;
+      // IMPROVED: Use word count instead of character count for better narration timing
+      // Average speaking rate: ~150 words per minute (2.5 words/second)
+      const getWordCount = (text: string) => text.trim().split(/\s+/).filter(w => w.length > 0).length;
 
+      const totalWords = currentBeats.reduce((sum, b) => sum + getWordCount(b.script_text || ''), 0);
+      if (totalWords === 0) {
+          // Fallback to equal distribution
+          const equalDur = totalDuration / currentBeats.length;
+          let cursor = 0;
+          return currentBeats.map((b, i) => ({
+              ...b,
+              startTime: Number(cursor.toFixed(2)),
+              endTime: Number((cursor + equalDur).toFixed(2)),
+              suggested_duration: Number(equalDur.toFixed(2))
+          }));
+      }
+
+      // Calculate durations based on word count (more accurate for narration)
       let durations = currentBeats.map(b => {
-          const ratio = (b.script_text?.length || 0) / totalChars;
+          const wordCount = getWordCount(b.script_text || '');
+          const ratio = wordCount / totalWords;
           return ratio * totalDuration;
       });
 
-      const MIN_DURATION = 1.5;
+      // Smart minimum duration based on content
+      const MIN_DURATION = 2.0; // Increased for better pacing
+      const MAX_DURATION = 15.0; // Cap for very long segments
+
       if (totalDuration > (currentBeats.length * MIN_DURATION)) {
           let hasChange = true;
           let iterations = 0;
-          while(hasChange && iterations < 20) {
+          while(hasChange && iterations < 30) {
               hasChange = false;
               iterations++;
-              
+
+              // Enforce minimums
               for(let i=0; i<durations.length; i++) {
                   if (durations[i] < MIN_DURATION) {
                       const deficit = MIN_DURATION - durations[i];
                       let maxIdx = -1;
                       let maxVal = -1;
                       for(let j=0; j<durations.length; j++) {
-                          if (durations[j] > maxVal && j !== i) {
+                          if (durations[j] > maxVal && j !== i && durations[j] < MAX_DURATION) {
                               maxVal = durations[j];
                               maxIdx = j;
                           }
                       }
-                      if (maxIdx !== -1 && durations[maxIdx] > (MIN_DURATION + deficit + 0.5)) {
+                      if (maxIdx !== -1 && durations[maxIdx] > (MIN_DURATION + deficit + 1.0)) {
                           durations[i] += deficit;
                           durations[maxIdx] -= deficit;
+                          hasChange = true;
+                      }
+                  }
+              }
+
+              // Cap maximums for better pacing
+              for(let i=0; i<durations.length; i++) {
+                  if (durations[i] > MAX_DURATION) {
+                      const excess = durations[i] - MAX_DURATION;
+                      let minIdx = -1;
+                      let minVal = Infinity;
+                      for(let j=0; j<durations.length; j++) {
+                          if (durations[j] < minVal && j !== i) {
+                              minVal = durations[j];
+                              minIdx = j;
+                          }
+                      }
+                      if (minIdx !== -1) {
+                          durations[i] -= excess;
+                          durations[minIdx] += excess;
                           hasChange = true;
                       }
                   }
@@ -109,18 +149,23 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
           }
       }
 
+      // Normalize to match total duration exactly
+      const actualTotal = durations.reduce((sum, d) => sum + d, 0);
+      const scaleFactor = totalDuration / actualTotal;
+      durations = durations.map(d => d * scaleFactor);
+
       let cursor = 0.0;
       return currentBeats.map((b, i) => {
           const duration = durations[i];
           const start = Number(cursor.toFixed(2));
           let end = Number((cursor + duration).toFixed(2));
-          
+
           if (i === currentBeats.length - 1) {
               end = Number(totalDuration.toFixed(2));
           }
-          
+
           cursor = end;
-          
+
           return {
               ...b,
               startTime: start,

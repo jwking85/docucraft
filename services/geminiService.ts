@@ -65,6 +65,16 @@ export const breakdownScript = async (script: string): Promise<StoryBeat[]> => {
   try {
     const json = JSON.parse(cleanJsonOutput(text));
     return json.map((item: any, idx: number) => {
+      // Calculate smart duration based on word count
+      const wordCount = (item.script_text || '').trim().split(/\s+/).filter((w: string) => w.length > 0).length;
+      // Average speaking rate: 2.5 words/second, plus padding
+      const calculatedDuration = Math.max(4, Math.min(15, (wordCount / 2.5) + 1.5));
+
+      // Use AI suggestion if reasonable, otherwise use calculated
+      let duration = item.suggested_duration || calculatedDuration;
+      if (duration < 3) duration = calculatedDuration;
+      if (duration > 18) duration = 15; // Cap for YouTube retention
+
       // Use intelligent motion suggestion if AI didn't provide one
       const suggestedMotion = item.motion || suggestMotionForScene(item.visual_prompt, item.script_text);
 
@@ -72,7 +82,7 @@ export const breakdownScript = async (script: string): Promise<StoryBeat[]> => {
         id: `beat-${Date.now()}-${idx}`,
         script_text: item.script_text,
         visual_prompt: item.visual_prompt,
-        suggested_duration: item.suggested_duration || 8,
+        suggested_duration: Number(duration.toFixed(1)),
         is_generating_image: false,
         motion: suggestedMotion
       };
@@ -161,24 +171,38 @@ export const generateImage = async (prompt: string, useUltra: boolean = false): 
         // Pro mode: Add style keywords for more dramatic/professional results
         const styleHint = useUltra ? ' cinematic professional dramatic lighting' : '';
 
-        const queryPrompt = `You are a stock photo search expert. Extract the MAIN SUBJECT and SETTING from this scene description. Focus on what would appear in a photograph, ignore actions/emotions.
+        const queryPrompt = `You are a professional stock photo search expert. Extract VISUAL SEARCH KEYWORDS from this scene description for finding documentary-quality photos.
 
-Examples:
-Input: "Wide shot of a classic 1990s diner interior with people eating"
-Output: diner interior 1990s
+RULES:
+1. Focus on CONCRETE, VISUAL elements (objects, places, settings)
+2. Remove abstract concepts, actions, emotions, and camera directions
+3. Keep era/time period markers (1990s, vintage, modern)
+4. Keep lighting/mood when specific (dramatic, dark, bright)
+5. Return 3-5 keywords maximum
+6. Format: simple space-separated keywords, NO punctuation
 
-Input: "Close-up of vintage rotary phone on wooden desk"
-Output: vintage rotary phone desk
+EXAMPLES:
+"Wide shot of a classic 1990s diner interior with people eating"
+→ 1990s diner interior retro
 
-Input: "Aerial view of Manhattan skyline at sunset"
-Output: manhattan skyline sunset
+"Close-up of vintage rotary phone on wooden desk with dramatic lighting"
+→ vintage rotary phone wooden desk
 
-Input: "Dimly lit sports bar at night, 1990s aesthetic, beer bottles"
-Output: sports bar interior dim lighting
+"Aerial view of Manhattan skyline at sunset, golden hour"
+→ manhattan skyline sunset golden
+
+"Dark, moody shot of abandoned factory with broken windows"
+→ abandoned factory industrial dark
+
+"Nickelodeon logo splattered on orange background, 1990s aesthetic"
+→ nickelodeon logo orange 1990s
+
+"Children playing at playground in suburban neighborhood, summer"
+→ playground children suburban summer
 
 Now extract keywords from: "${prompt}"
 
-Return ONLY 3-5 keywords describing the main subject and setting. No bullets, quotes, or formatting:`;
+Return ONLY keywords (space-separated):`;
 
         const response = await ai.models.generateContent({
           model: 'gemini-2.0-flash',
@@ -258,14 +282,63 @@ Return ONLY 3-5 keywords describing the main subject and setting. No bullets, qu
 };
 
 export const generateDocuVideo = async (prompt: string): Promise<string> => {
-  // "Video" generation actually generates a still image with motion effect applied
-  // This is the same approach used by professional documentaries (Ken Burns effect)
-  console.log('🎬 Generating MOTION image for Ken Burns effect...');
+  console.log('🎬 Attempting AI video generation with Veo...');
 
-  // Use the same smart image generation with motion keywords added
-  // Motion needs wide, dynamic shots that work well with pan/zoom
-  const motionPrompt = `${prompt}, cinematic wide angle, dynamic composition, epic dramatic`;
-  return generateImage(motionPrompt, true); // Use ultra mode for better quality
+  // NOTE: Veo 2 requires Google Cloud AI Platform API (paid tier)
+  // Free tier Gemini API keys don't have access to video generation
+
+  if (!process.env.API_KEY) {
+    throw new Error("VEO_PAYWALL");
+  }
+
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+    // Try Veo 2 video generation
+    const response = await ai.models.generateContent({
+      model: 'veo-002', // Veo 2 model
+      contents: {
+        parts: [{
+          text: `Create a 5-second documentary-style video clip: ${prompt}. Cinematic, professional quality, smooth camera movement.`
+        }]
+      },
+      config: {
+        temperature: 0.7
+      }
+    });
+
+    // Check if video was generated
+    if (response && response.candidates && response.candidates[0]) {
+      const candidate = response.candidates[0];
+      if (candidate.content && candidate.content.parts && candidate.content.parts[0]) {
+        const part = candidate.content.parts[0];
+        if (part.inlineData && part.inlineData.data) {
+          // Return base64 video
+          const mimeType = part.inlineData.mimeType || 'video/mp4';
+          return `data:${mimeType};base64,${part.inlineData.data}`;
+        }
+      }
+    }
+
+    // If we got here, Veo didn't return video
+    throw new Error("VEO_UNAVAILABLE");
+
+  } catch (error: any) {
+    console.warn('⚠️ Veo video generation failed:', error.message);
+
+    // Check for specific error messages
+    if (error.message?.includes('404') || error.message?.includes('not found') ||
+        error.message?.includes('VEO_UNAVAILABLE')) {
+      throw new Error("VEO_PAYWALL");
+    }
+
+    if (error.message?.includes('403') || error.message?.includes('permission')) {
+      throw new Error("VEO_PAYWALL");
+    }
+
+    // Generic error - assume paywall
+    throw new Error("VEO_PAYWALL");
+  }
 };
 
 export const analyzeImagesBatch = async (files: File[], scriptContext?: string): Promise<ImageAnalysis[]> => {
