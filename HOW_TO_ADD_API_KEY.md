@@ -70,7 +70,7 @@ REPLICATE_API_KEY=your_replicate_key  # Optional
 4. Copy the key (starts with `AIzaSy...`)
 5. Paste into `.env.local`:
    ```env
-   GEMINI_API_KEY=AIzaSyAd0u8xW3wdGERrah9v3PIxfdBoLVDblNU
+   GEMINI_API_KEY=YOUR_GOOGLE_AI_STUDIO_KEY_HERE
    ```
 
 #### Pexels (Optional - Free)
