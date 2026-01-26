@@ -7,6 +7,7 @@ import StoryBeatCard from './StoryBeatCard';
 import VoiceRecorder from './VoiceRecorder';
 import VideoTrimmer from './VideoTrimmer';
 import { Sparkles, Layout, Loader2, ArrowRight, Mic, Music, Volume2, Info, AlertCircle, RefreshCw, CheckCircle2, FileText, Radio } from 'lucide-react';
+import { calculateSmartTimings, SceneTimingInput } from '../services/smartTiming';
 
 interface StoryWorkspaceProps {
   onComplete: (timeline: TimelineScene[], audioFile: File | null) => void;
@@ -72,94 +73,34 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
   const distributeAudioTimings = (currentBeats: StoryBeat[], totalDuration: number): StoryBeat[] => {
       if (!totalDuration || totalDuration <= 0) return currentBeats;
 
-      // PRECISE TIMING: Match speaking rate exactly
-      // 150 words/minute = 2.5 words/second = 0.4 seconds/word
-      const getWordCount = (text: string) => text.trim().split(/\s+/).filter(w => w.length > 0).length;
+      console.log(`🧠 SmartTiming: Distributing ${totalDuration.toFixed(2)}s across ${currentBeats.length} scenes`);
 
-      const totalWords = currentBeats.reduce((sum, b) => sum + getWordCount(b.script_text || ''), 0);
-      if (totalWords === 0) {
-          // Fallback to equal distribution
-          const equalDur = totalDuration / currentBeats.length;
-          let cursor = 0;
-          return currentBeats.map((b, i) => ({
-              ...b,
-              startTime: Number(cursor.toFixed(2)),
-              endTime: Number((cursor + equalDur).toFixed(2)),
-              suggested_duration: Number(equalDur.toFixed(2))
-          }));
-      }
+      // Convert StoryBeats to SceneTimingInput format
+      const sceneInputs: SceneTimingInput[] = currentBeats.map(b => ({
+          id: b.id,
+          text: b.script_text || '',
+          sceneType: 'narration' as const,
+      }));
 
-      // Calculate durations based on EXACT word count proportions
-      let durations = currentBeats.map(b => {
-          const wordCount = getWordCount(b.script_text || '');
-          const ratio = wordCount / totalWords;
-          return ratio * totalDuration;
-      });
+      // Calculate professional timings using SmartTiming
+      const timings = calculateSmartTimings(sceneInputs);
 
-      // Minimal constraints - trust the word count calculation
-      const MIN_DURATION = 1.5; // Allow shorter scenes if word count is low
-      const MAX_DURATION = 15.0; // Cap for very long segments
+      // Calculate total estimated duration
+      const estimatedTotal = timings.reduce((sum, t) => sum + t.durationSec, 0);
 
-      if (totalDuration > (currentBeats.length * MIN_DURATION)) {
-          let hasChange = true;
-          let iterations = 0;
-          while(hasChange && iterations < 30) {
-              hasChange = false;
-              iterations++;
-
-              // Enforce minimums
-              for(let i=0; i<durations.length; i++) {
-                  if (durations[i] < MIN_DURATION) {
-                      const deficit = MIN_DURATION - durations[i];
-                      let maxIdx = -1;
-                      let maxVal = -1;
-                      for(let j=0; j<durations.length; j++) {
-                          if (durations[j] > maxVal && j !== i && durations[j] < MAX_DURATION) {
-                              maxVal = durations[j];
-                              maxIdx = j;
-                          }
-                      }
-                      if (maxIdx !== -1 && durations[maxIdx] > (MIN_DURATION + deficit + 1.0)) {
-                          durations[i] += deficit;
-                          durations[maxIdx] -= deficit;
-                          hasChange = true;
-                      }
-                  }
-              }
-
-              // Cap maximums for better pacing
-              for(let i=0; i<durations.length; i++) {
-                  if (durations[i] > MAX_DURATION) {
-                      const excess = durations[i] - MAX_DURATION;
-                      let minIdx = -1;
-                      let minVal = Infinity;
-                      for(let j=0; j<durations.length; j++) {
-                          if (durations[j] < minVal && j !== i) {
-                              minVal = durations[j];
-                              minIdx = j;
-                          }
-                      }
-                      if (minIdx !== -1) {
-                          durations[i] -= excess;
-                          durations[minIdx] += excess;
-                          hasChange = true;
-                      }
-                  }
-              }
-          }
-      }
-
-      // Normalize to match total duration exactly
-      const actualTotal = durations.reduce((sum, d) => sum + d, 0);
-      const scaleFactor = totalDuration / actualTotal;
-      durations = durations.map(d => d * scaleFactor);
+      // Scale timings to match actual audio duration
+      const scaleFactor = totalDuration / estimatedTotal;
+      console.log(`📊 Scaling factor: ${scaleFactor.toFixed(3)} (estimated ${estimatedTotal.toFixed(2)}s → actual ${totalDuration.toFixed(2)}s)`);
 
       let cursor = 0.0;
       return currentBeats.map((b, i) => {
-          const duration = durations[i];
-          const start = Number(cursor.toFixed(2));
-          let end = Number((cursor + duration).toFixed(2));
+          const timing = timings[i];
+          const scaledDuration = timing.durationSec * scaleFactor;
 
+          const start = Number(cursor.toFixed(2));
+          let end = Number((cursor + scaledDuration).toFixed(2));
+
+          // Ensure last scene ends exactly at total duration
           if (i === currentBeats.length - 1) {
               end = Number(totalDuration.toFixed(2));
           }
@@ -170,7 +111,10 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
               ...b,
               startTime: start,
               endTime: end,
-              suggested_duration: Number((end - start).toFixed(2))
+              suggested_duration: Number((end - start).toFixed(2)),
+              // Add SmartTiming debug metadata
+              _timing_debug: timing.debugMeta,
+              _timing_reason: timing.reason,
           };
       });
   };

@@ -5,6 +5,7 @@ import {
   SCRIPT_BREAKDOWN_PROMPT
 } from "../constants";
 import { ImageAnalysis, StoryBeat } from "../types";
+import { calculateSmartTimings, SceneTimingInput, SceneTimingOutput } from "./smartTiming";
 
 // Helper to convert file to Base64
 const fileToPart = async (file: File): Promise<{ inlineData: { data: string; mimeType: string } }> => {
@@ -64,34 +65,35 @@ export const breakdownScript = async (script: string): Promise<StoryBeat[]> => {
   const text = response.text || "[]";
   try {
     const json = JSON.parse(cleanJsonOutput(text));
-    return json.map((item: any, idx: number) => {
-      // Calculate smart duration based on word count (PRECISE TIMING)
-      const wordCount = (item.script_text || '').trim().split(/\s+/).filter((w: string) => w.length > 0).length;
 
-      // Speaking rate: 150 words/minute = 2.5 words/second = 0.4 seconds/word
-      // Add padding for natural pauses
-      const calculatedDuration = Math.max(4, Math.min(15, (wordCount * 0.4) + 0.5));
+    // SMARTTIMING INTEGRATION: Convert AI response to SceneTimingInput format
+    const sceneInputs: SceneTimingInput[] = json.map((item: any, idx: number) => ({
+      id: `beat-${Date.now()}-${idx}`,
+      text: item.script_text || '',
+      sceneType: 'narration' as const,
+    }));
 
-      // Use AI suggestion only if it's within reasonable range of calculated
-      let duration = calculatedDuration;
-      if (item.suggested_duration && item.suggested_duration >= 4 && item.suggested_duration <= 15) {
-        // Use AI suggestion if it's within 25% of calculated duration
-        const diff = Math.abs(item.suggested_duration - calculatedDuration);
-        if (diff / calculatedDuration < 0.25) {
-          duration = item.suggested_duration;
-        }
-      }
+    // Calculate professional timings using SmartTiming module
+    const timings = calculateSmartTimings(sceneInputs);
 
-      // Use intelligent motion suggestion if AI didn't provide one
-      const suggestedMotion = item.motion || suggestMotionForScene(item.visual_prompt, item.script_text);
+    // Convert back to StoryBeat format with timing metadata
+    return timings.map((timing, idx) => {
+      const originalItem = json[idx];
+      const suggestedMotion = originalItem.motion || suggestMotionForScene(originalItem.visual_prompt, originalItem.script_text);
 
       return {
-        id: `beat-${Date.now()}-${idx}`,
-        script_text: item.script_text,
-        visual_prompt: item.visual_prompt,
-        suggested_duration: Number(duration.toFixed(1)),
+        id: timing.id,
+        script_text: originalItem.script_text,
+        visual_prompt: originalItem.visual_prompt,
+        suggested_duration: timing.durationSec,
+        startTime: timing.startTime,
+        endTime: timing.endTime,
         is_generating_image: false,
-        motion: suggestedMotion
+        motion: suggestedMotion,
+
+        // Add debug metadata for transparency
+        _timing_debug: timing.debugMeta,
+        _timing_reason: timing.reason,
       };
     });
   } catch (e) {
@@ -189,16 +191,22 @@ export const alignAudioToScript = async (audioFile: File, scriptSegments: { id: 
 
         console.log(`✅ Segment "${segment.text.substring(0, 40)}...": ${timing.start.toFixed(2)}s - ${timing.end.toFixed(2)}s`);
       } else {
-        // Fallback: estimate based on word count
-        const wordCount = segment.text.split(/\s+/).length;
-        const duration = Math.max(3, wordCount * 0.4 + 0.5);
+        // SMARTTIMING FALLBACK: Use professional estimation
+        const sceneInput: SceneTimingInput = {
+          id: segment.id,
+          text: segment.text,
+          sceneType: 'narration',
+        };
+        const [estimatedTiming] = calculateSmartTimings([sceneInput]);
+        const duration = estimatedTiming.durationSec;
+
         segmentTimings[segment.id] = {
           start: Number(lastEnd.toFixed(2)),
           end: Number((lastEnd + duration).toFixed(2))
         };
         lastEnd += duration;
 
-        console.warn(`⚠️ Estimated segment "${segment.text.substring(0, 40)}...": ${segmentTimings[segment.id].start}s - ${segmentTimings[segment.id].end}s`);
+        console.warn(`⚠️ SmartTiming estimated "${segment.text.substring(0, 40)}...": ${segmentTimings[segment.id].start}s - ${segmentTimings[segment.id].end}s (${estimatedTiming.debugMeta.wordCount} words)`);
       }
     }
 
@@ -208,29 +216,29 @@ export const alignAudioToScript = async (audioFile: File, scriptSegments: { id: 
   } catch (error: any) {
     console.error('❌ Sync failed:', error);
 
-    // ULTIMATE FALLBACK: Calculate based on word count and audio duration
-    console.log('⚠️ Using intelligent fallback based on word count...');
+    // SMARTTIMING ULTIMATE FALLBACK: Professional estimation
+    console.log('⚠️ Using SmartTiming intelligent fallback...');
 
     const segmentTimings: Record<string, { start: number; end: number }> = {};
-    const totalWords = scriptSegments.reduce((sum, s) => sum + s.text.split(/\s+/).length, 0);
 
-    // Get audio duration from file metadata
-    const audioDuration = await getAudioDuration(audioFile);
-    let cursor = 0;
+    // Convert to SceneTimingInput format
+    const sceneInputs: SceneTimingInput[] = scriptSegments.map(s => ({
+      id: s.id,
+      text: s.text,
+      sceneType: 'narration' as const,
+    }));
 
-    for (const segment of scriptSegments) {
-      const wordCount = segment.text.split(/\s+/).length;
-      const proportion = wordCount / totalWords;
-      const duration = Math.max(2, Math.min(15, proportion * audioDuration));
+    // Calculate professional timings
+    const timings = calculateSmartTimings(sceneInputs);
 
-      segmentTimings[segment.id] = {
-        start: Number(cursor.toFixed(2)),
-        end: Number((cursor + duration).toFixed(2))
+    // Convert to expected format
+    timings.forEach(timing => {
+      segmentTimings[timing.id] = {
+        start: timing.startTime,
+        end: timing.endTime,
       };
-
-      cursor += duration;
-      console.log(`📊 Fallback segment: ${segmentTimings[segment.id].start}s - ${segmentTimings[segment.id].end}s`);
-    }
+      console.log(`📊 SmartTiming fallback: ${timing.startTime.toFixed(2)}s - ${timing.endTime.toFixed(2)}s (${timing.reason})`);
+    });
 
     return segmentTimings;
   }

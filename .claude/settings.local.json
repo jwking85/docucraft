@@ -19,7 +19,9 @@
       "Bash(Stop-Process -Force)",
       "Bash(echo:*)",
       "Bash(node -e:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(npm run timing:debug:*)",
+      "Bash(node:*)"
     ],
     "deny": [],
     "ask": []
