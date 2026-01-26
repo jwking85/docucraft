@@ -370,7 +370,12 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
           const index = prev.findIndex(b => b.id === beatId);
           if (index === -1) return prev;
 
+          console.log(`⚙️ Timing changed for scene ${index + 1}: ${newStart.toFixed(2)}s - ${newEnd.toFixed(2)}s`);
+
           const newBeats = [...prev];
+
+          // Update the changed scene
+          const oldEnd = newBeats[index].endTime || newBeats[index].suggested_duration || 5;
           newBeats[index] = {
               ...newBeats[index],
               startTime: newStart,
@@ -378,35 +383,33 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
               suggested_duration: Number((newEnd - newStart).toFixed(2))
           };
 
-          if (index < newBeats.length - 1) {
-              const nextBeat = newBeats[index + 1];
-              if (newEnd > (nextBeat.startTime || 0)) {
-                  newBeats[index + 1] = {
-                      ...nextBeat,
-                      startTime: newEnd,
-                      endTime: Math.max(newEnd + 1, nextBeat.endTime || newEnd + 5) 
-                  };
-              } 
-              else if (newEnd < (nextBeat.startTime || 0)) {
-                   newBeats[index + 1] = {
-                      ...nextBeat,
-                      startTime: newEnd
-                  };
-              }
-          }
+          // AUTOMATIC ADJUSTMENT: Shift all following scenes
+          const timeShift = newEnd - oldEnd;
 
-          if (index > 0) {
-              const prevBeat = newBeats[index - 1];
-              if (newStart < (prevBeat.endTime || 0) || newStart > (prevBeat.endTime || 0)) {
-                   newBeats[index - 1] = {
-                       ...prevBeat,
-                       endTime: newStart
-                   };
+          if (Math.abs(timeShift) > 0.01 && index < newBeats.length - 1) {
+              console.log(`🔄 Shifting ${newBeats.length - index - 1} following scenes by ${timeShift.toFixed(2)}s`);
+
+              for (let i = index + 1; i < newBeats.length; i++) {
+                  const currentStart = newBeats[i].startTime || 0;
+                  const currentEnd = newBeats[i].endTime || (currentStart + (newBeats[i].suggested_duration || 5));
+
+                  newBeats[i] = {
+                      ...newBeats[i],
+                      startTime: Number((currentStart + timeShift).toFixed(2)),
+                      endTime: Number((currentEnd + timeShift).toFixed(2)),
+                      suggested_duration: newBeats[i].suggested_duration
+                  };
+
+                  console.log(`  Scene ${i + 1}: ${newBeats[i].startTime}s - ${newBeats[i].endTime}s`);
               }
+
+              console.log('✅ All following scenes adjusted automatically!');
           }
 
           return newBeats;
       });
+
+      setIsAudioSynced(false); // Mark as manually adjusted
   };
 
   const handleGenerateImage = async (beatId: string, prompt: string, useUltra: boolean = false) => {
