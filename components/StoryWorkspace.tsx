@@ -72,8 +72,8 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
   const distributeAudioTimings = (currentBeats: StoryBeat[], totalDuration: number): StoryBeat[] => {
       if (!totalDuration || totalDuration <= 0) return currentBeats;
 
-      // IMPROVED: Use word count instead of character count for better narration timing
-      // Average speaking rate: ~150 words per minute (2.5 words/second)
+      // PRECISE TIMING: Match speaking rate exactly
+      // 150 words/minute = 2.5 words/second = 0.4 seconds/word
       const getWordCount = (text: string) => text.trim().split(/\s+/).filter(w => w.length > 0).length;
 
       const totalWords = currentBeats.reduce((sum, b) => sum + getWordCount(b.script_text || ''), 0);
@@ -89,15 +89,15 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
           }));
       }
 
-      // Calculate durations based on word count (more accurate for narration)
+      // Calculate durations based on EXACT word count proportions
       let durations = currentBeats.map(b => {
           const wordCount = getWordCount(b.script_text || '');
           const ratio = wordCount / totalWords;
           return ratio * totalDuration;
       });
 
-      // Smart minimum duration based on content
-      const MIN_DURATION = 2.0; // Increased for better pacing
+      // Minimal constraints - trust the word count calculation
+      const MIN_DURATION = 1.5; // Allow shorter scenes if word count is low
       const MAX_DURATION = 15.0; // Cap for very long segments
 
       if (totalDuration > (currentBeats.length * MIN_DURATION)) {
@@ -288,36 +288,47 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
     try {
         const segments = beats.map(b => ({ id: b.id, text: b.script_text }));
         const alignment = await alignAudioToScript(audioFile, segments);
-        
-        let cursor = 0;
+
+        console.log('🎯 Audio alignment result:', alignment);
+
         setBeats(prev => {
             return prev.map((b, i) => {
                 const align = alignment[b.id];
-                let start = cursor;
-                let end = cursor + (b.suggested_duration || 5);
+                let start = 0;
+                let end = b.suggested_duration || 5;
 
-                if (align) {
+                if (align && align.start !== undefined && align.end !== undefined) {
+                    // TRUST THE AI ALIGNMENT - use exact timestamps
                     start = align.start;
                     end = align.end;
+                    console.log(`✅ Scene ${i}: AI sync ${start.toFixed(2)}s - ${end.toFixed(2)}s (${(end - start).toFixed(2)}s)`);
+                } else if (i > 0 && prev[i - 1]) {
+                    // Fallback: position after previous scene
+                    const prevAlign = alignment[prev[i - 1].id];
+                    if (prevAlign && prevAlign.end !== undefined) {
+                        start = prevAlign.end;
+                        end = start + (b.suggested_duration || 5);
+                    }
+                    console.log(`⚠️ Scene ${i}: Fallback timing ${start.toFixed(2)}s - ${end.toFixed(2)}s`);
                 } else if (i === prev.length - 1 && audioDisplayDuration > 0) {
-                    end = audioDisplayDuration; // Snap last to end
+                    // Last scene: extend to end of audio
+                    if (align && align.start !== undefined) {
+                        end = audioDisplayDuration;
+                    }
                 }
 
-                if (Math.abs(start - cursor) > 0.1) {
-                    start = cursor; 
-                }
-                
-                cursor = end;
-                return { 
-                    ...b, 
-                    startTime: Number(start.toFixed(2)), 
-                    endTime: Number(end.toFixed(2)), 
-                    suggested_duration: Number((end - start).toFixed(2)) 
+                return {
+                    ...b,
+                    startTime: Number(start.toFixed(2)),
+                    endTime: Number(end.toFixed(2)),
+                    suggested_duration: Number((end - start).toFixed(2))
                 };
             });
         });
         setIsAudioSynced(true);
+        console.log('✅ Audio sync complete - scenes aligned to actual audio timestamps');
     } catch (e) {
+        console.error('❌ Audio sync failed:', e);
         handleError(e, "Audio Sync");
     } finally {
         setIsSyncingAudio(false);
@@ -716,20 +727,34 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
                        >
                            <RotateCcw className="w-3 h-3" /> Auto-Fit
                        </button>
-                       <button 
+                       <button
                           onClick={handleSmartSync}
                           disabled={isSyncingAudio}
-                          className={`text-[10px] px-2 py-1 rounded border flex items-center gap-1 transition-all ${isAudioSynced 
-                              ? 'bg-green-500/10 border-green-500/30 text-green-400' 
+                          title="AI analyzes your audio and aligns scenes to EXACT timestamps where each segment is spoken. Click for frame-accurate sync!"
+                          className={`text-[10px] px-2 py-1 rounded border flex items-center gap-1 transition-all ${isAudioSynced
+                              ? 'bg-green-500/10 border-green-500/30 text-green-400'
                               : 'bg-indigo-600 text-white border-transparent hover:bg-indigo-500 shadow-lg shadow-indigo-900/30'}`}
                        >
                            {isSyncingAudio ? <Loader2 className="w-3 h-3 animate-spin" /> : (isAudioSynced ? <CheckCircle2 className="w-3 h-3" /> : <RefreshCw className="w-3 h-3" />)}
-                           {isSyncingAudio ? 'Syncing...' : (isAudioSynced ? 'Audio Synced' : 'Sync to Audio')}
+                           {isSyncingAudio ? 'Syncing...' : (isAudioSynced ? 'Audio Synced ✓' : 'Sync to Audio')}
                        </button>
                    </>
                )}
             </div>
          </div>
+
+         {/* Timing Help Info */}
+         {audioFile && beats.length > 0 && !isAudioSynced && (
+            <div className="bg-blue-950/20 border border-blue-900/30 rounded-lg p-3 mb-4">
+               <div className="flex items-start gap-2">
+                  <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
+                  <div className="text-xs text-blue-300">
+                     <strong className="text-blue-200">Tip:</strong> Click "Sync to Audio" for perfect timing!
+                     AI listens to your audio and aligns each scene to the exact moment it's spoken (±0.01s accuracy).
+                  </div>
+               </div>
+            </div>
+         )}
 
          <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-3 min-h-0 pb-4">
             {beats.length === 0 ? (

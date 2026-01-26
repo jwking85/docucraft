@@ -82,9 +82,10 @@ Your goal is to break down a script into a professional "Visual Storyboard" opti
    - **static**: Action, detail shots, when subject is already dynamic
 
 6. **DURATION CALCULATION:**
-   - Use 0.35-0.4 seconds per word (accounting for natural pauses)
-   - Add 1-2 seconds for emotional beats
-   - Minimum 6 seconds, maximum 18 seconds per scene
+   - Use 0.4 seconds per word (150 words/minute speaking rate)
+   - Add 0.5-1 second for emotional beats and natural pauses
+   - Minimum 4 seconds, maximum 15 seconds per scene
+   - Formula: duration = (word_count * 0.4) + 0.5
 
 **OUTPUT FORMAT:**
 Return a JSON array with each scene containing:

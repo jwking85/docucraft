@@ -65,15 +65,22 @@ export const breakdownScript = async (script: string): Promise<StoryBeat[]> => {
   try {
     const json = JSON.parse(cleanJsonOutput(text));
     return json.map((item: any, idx: number) => {
-      // Calculate smart duration based on word count
+      // Calculate smart duration based on word count (PRECISE TIMING)
       const wordCount = (item.script_text || '').trim().split(/\s+/).filter((w: string) => w.length > 0).length;
-      // Average speaking rate: 2.5 words/second, plus padding
-      const calculatedDuration = Math.max(4, Math.min(15, (wordCount / 2.5) + 1.5));
 
-      // Use AI suggestion if reasonable, otherwise use calculated
-      let duration = item.suggested_duration || calculatedDuration;
-      if (duration < 3) duration = calculatedDuration;
-      if (duration > 18) duration = 15; // Cap for YouTube retention
+      // Speaking rate: 150 words/minute = 2.5 words/second = 0.4 seconds/word
+      // Add padding for natural pauses
+      const calculatedDuration = Math.max(4, Math.min(15, (wordCount * 0.4) + 0.5));
+
+      // Use AI suggestion only if it's within reasonable range of calculated
+      let duration = calculatedDuration;
+      if (item.suggested_duration && item.suggested_duration >= 4 && item.suggested_duration <= 15) {
+        // Use AI suggestion if it's within 25% of calculated duration
+        const diff = Math.abs(item.suggested_duration - calculatedDuration);
+        if (diff / calculatedDuration < 0.25) {
+          duration = item.suggested_duration;
+        }
+      }
 
       // Use intelligent motion suggestion if AI didn't provide one
       const suggestedMotion = item.motion || suggestMotionForScene(item.visual_prompt, item.script_text);
@@ -100,24 +107,34 @@ export const alignAudioToScript = async (audioFile: File, scriptSegments: { id: 
   const audioPart = await fileToPart(audioFile);
   const segmentsList = scriptSegments.map((s, i) => `${i + 1}. "${s.text}" (ID: ${s.id})`).join('\n');
 
-  // Aggressive prompt for timestamp extraction
+  // ULTRA-PRECISE prompt for timestamp extraction
   const prompt = `
-    I am a professional video editor sync specialist.
-    
-    Here is the script with IDs:
+    You are a professional audio transcription specialist with frame-accurate timing precision.
+
+    SCRIPT SEGMENTS TO SYNC:
     ${segmentsList}
-    
-    TASK:
-    Listen to the audio file. For each numbered segment:
-    1. Identify the EXACT timestamp (in seconds, e.g., 12.45) when the **FIRST WORD** of that segment is spoken. This is "start".
-    2. Identify the timestamp when the **LAST WORD** of that segment is spoken. This is "end".
-    
-    RULES:
-    - Return precise floats (e.g. 1.25).
-    - Ensure TIMESTAMPS ARE CONTIGUOUS. The end of segment 1 should be very close to the start of segment 2.
-    - DO NOT leave large gaps unless there is silence in the audio.
-    - If a segment is missing, make a best guess based on the previous segment's end.
-    - Return a JSON object mapping ID to { "start": number, "end": number }.
+
+    TASK: Listen to the audio and extract EXACT timestamps for each segment.
+
+    For each numbered segment, identify:
+    1. "start": The EXACT moment (in seconds) when the FIRST WORD begins (e.g., 12.34)
+    2. "end": The EXACT moment (in seconds) when the LAST WORD ends (e.g., 18.67)
+
+    CRITICAL RULES:
+    - Precision: Use 2 decimal places (0.01 second accuracy)
+    - Contiguous: End of segment N should match start of segment N+1 (±0.1s)
+    - No gaps: If there's a pause, include it in the previous segment's end time
+    - Sequential: Timestamps must increase monotonically
+    - Complete: All segments must have valid timestamps
+
+    OUTPUT FORMAT:
+    Return JSON object mapping segment ID to timing:
+    {
+      "beat-123-0": { "start": 0.00, "end": 5.34 },
+      "beat-123-1": { "start": 5.34, "end": 10.12 }
+    }
+
+    Be frame-accurate. This is for professional video editing.
   `;
 
   const response = await ai.models.generateContent({
