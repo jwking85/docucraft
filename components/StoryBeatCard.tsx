@@ -36,6 +36,7 @@ const StoryBeatCard: React.FC<StoryBeatCardProps> = ({
   // Local state for inputs to allow smooth typing
   const [localStart, setLocalStart] = useState(beat.startTime?.toString() || "0");
   const [localEnd, setLocalEnd] = useState(beat.endTime?.toString() || "5");
+  const lastCommittedRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
 
   // Sync local state with props when they change externally (e.g. from Auto-Distribute)
   useEffect(() => {
@@ -46,7 +47,17 @@ const StoryBeatCard: React.FC<StoryBeatCardProps> = ({
   const handleTimingBlur = () => {
       const s = parseFloat(localStart);
       const e = parseFloat(localEnd);
+
+      // Prevent duplicate calls with same values
       if (!isNaN(s) && !isNaN(e)) {
+          const last = lastCommittedRef.current;
+          if (Math.abs(s - last.start) < 0.01 && Math.abs(e - last.end) < 0.01) {
+              console.log(`⏭️  Skipping duplicate timing change for ${beat.id}`);
+              return;
+          }
+
+          console.log(`📤 Committing timing change: ${s.toFixed(2)}s - ${e.toFixed(2)}s`);
+          lastCommittedRef.current = { start: s, end: e };
           onTimingChange(beat.id, s, e);
       }
   };
