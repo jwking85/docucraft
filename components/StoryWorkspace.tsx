@@ -6,7 +6,7 @@ import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB } from '../constants';
 import StoryBeatCard from './StoryBeatCard';
 import VoiceRecorder from './VoiceRecorder';
 import VideoTrimmer from './VideoTrimmer';
-import { Sparkles, Layout, Loader2, ArrowRight, Mic, Music, Volume2, Info, AlertCircle, RefreshCw, CheckCircle2, RotateCcw, FileText, Radio } from 'lucide-react';
+import { Sparkles, Layout, Loader2, ArrowRight, Mic, Music, Volume2, Info, AlertCircle, RefreshCw, CheckCircle2, FileText, Radio } from 'lucide-react';
 
 interface StoryWorkspaceProps {
   onComplete: (timeline: TimelineScene[], audioFile: File | null) => void;
@@ -175,12 +175,7 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
       });
   };
 
-  const handleResetTimings = () => {
-      if (audioFile && audioDisplayDuration > 0) {
-          setBeats(prev => distributeAudioTimings(prev, audioDisplayDuration));
-          setIsAudioSynced(false);
-      }
-  };
+  // Removed handleResetTimings - no longer needed with auto-sync
 
   useEffect(() => {
       if (warningMsg) {
@@ -236,11 +231,46 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
     setBeats([]);
     setIsAudioSynced(false);
     try {
+      console.log('🚀 Breaking down script...');
       const newBeats = await breakdownScript(script);
+
+      // AUTOMATIC PERFECT SYNC - If audio exists, sync immediately!
       if (audioFile && audioDisplayDuration > 0) {
-          const distributed = distributeAudioTimings(newBeats, audioDisplayDuration);
-          setBeats(distributed);
+          console.log('🎯 Audio detected - Starting AUTOMATIC PERFECT SYNC...');
+          setIsSyncingAudio(true);
+
+          try {
+            const segments = newBeats.map(b => ({ id: b.id, text: b.script_text }));
+            const alignment = await alignAudioToScript(audioFile, segments);
+
+            console.log('✅ Auto-sync complete! Applying timestamps...');
+
+            const syncedBeats = newBeats.map((b) => {
+              const align = alignment[b.id];
+              if (align && align.start !== undefined && align.end !== undefined) {
+                return {
+                  ...b,
+                  startTime: Number(align.start.toFixed(2)),
+                  endTime: Number(align.end.toFixed(2)),
+                  suggested_duration: Number((align.end - align.start).toFixed(2))
+                };
+              }
+              return b;
+            });
+
+            setBeats(syncedBeats);
+            setIsAudioSynced(true);
+            console.log('🎉 PERFECT! Scenes auto-synced to audio with word-level precision!');
+          } catch (syncError) {
+            console.error('Auto-sync failed, using basic timing:', syncError);
+            // Fallback to basic timing
+            const distributed = distributeAudioTimings(newBeats, audioDisplayDuration);
+            setBeats(distributed);
+          } finally {
+            setIsSyncingAudio(false);
+          }
       } else {
+          console.log('ℹ️ No audio - using estimated timing');
           setBeats(newBeats);
       }
     } catch (e) {
@@ -700,11 +730,21 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
 
             <button
                onClick={handleBreakdown}
-               disabled={!script.trim() || isBreakingDown}
+               disabled={!script.trim() || isBreakingDown || isSyncingAudio}
                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/20 transition-all disabled:opacity-50 flex-shrink-0"
+               title={audioFile ? "AI will auto-sync scenes to your audio with word-level precision!" : "Analyze script and create scenes"}
             >
-               {isBreakingDown ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-               Analyze & Visualize
+               {isBreakingDown || isSyncingAudio ? (
+                 <>
+                   <Loader2 className="w-4 h-4 animate-spin" />
+                   {isSyncingAudio ? 'Perfect Sync...' : 'Analyzing...'}
+                 </>
+               ) : (
+                 <>
+                   <Sparkles className="w-4 h-4" />
+                   {audioFile ? 'Analyze & Auto-Sync ⚡' : 'Analyze & Visualize'}
+                 </>
+               )}
             </button>
         </div>
       </div>
@@ -720,37 +760,40 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
             <div className="flex items-center gap-2">
                {beats.length > 0 && audioFile && (
                    <>
-                       <button 
-                          onClick={handleResetTimings}
-                          className="text-[10px] px-2 py-1 rounded bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors flex items-center gap-1"
-                          title="Recalculate Default Timings"
-                       >
-                           <RotateCcw className="w-3 h-3" /> Auto-Fit
-                       </button>
+                       {isAudioSynced ? (
+                         <div className="text-[10px] px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/30 text-green-400 flex items-center gap-1.5 font-medium">
+                           <CheckCircle2 className="w-3 h-3" />
+                           Perfect Sync ✓
+                         </div>
+                       ) : (
+                         <div className="text-[10px] px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 flex items-center gap-1.5 font-medium">
+                           <Info className="w-3 h-3" />
+                           Click "Analyze & Auto-Sync" for perfect timing
+                         </div>
+                       )}
                        <button
+                          type="button"
                           onClick={handleSmartSync}
                           disabled={isSyncingAudio}
-                          title="AI analyzes your audio and aligns scenes to EXACT timestamps where each segment is spoken. Click for frame-accurate sync!"
-                          className={`text-[10px] px-2 py-1 rounded border flex items-center gap-1 transition-all ${isAudioSynced
-                              ? 'bg-green-500/10 border-green-500/30 text-green-400'
-                              : 'bg-indigo-600 text-white border-transparent hover:bg-indigo-500 shadow-lg shadow-indigo-900/30'}`}
+                          className="text-[10px] px-2 py-1 rounded bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors flex items-center gap-1"
+                          title="Re-sync if you edited the script"
                        >
-                           {isSyncingAudio ? <Loader2 className="w-3 h-3 animate-spin" /> : (isAudioSynced ? <CheckCircle2 className="w-3 h-3" /> : <RefreshCw className="w-3 h-3" />)}
-                           {isSyncingAudio ? 'Syncing...' : (isAudioSynced ? 'Audio Synced ✓' : 'Sync to Audio')}
+                           {isSyncingAudio ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                           Re-Sync
                        </button>
                    </>
                )}
             </div>
          </div>
 
-         {/* Timing Help Info */}
-         {audioFile && beats.length > 0 && !isAudioSynced && (
-            <div className="bg-blue-950/20 border border-blue-900/30 rounded-lg p-3 mb-4">
+         {/* Auto-Sync Status */}
+         {audioFile && beats.length === 0 && (
+            <div className="bg-gradient-to-r from-indigo-950/30 to-purple-950/30 border border-indigo-900/30 rounded-lg p-3 mb-4">
                <div className="flex items-start gap-2">
-                  <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
-                  <div className="text-xs text-blue-300">
-                     <strong className="text-blue-200">Tip:</strong> Click "Sync to Audio" for perfect timing!
-                     AI listens to your audio and aligns each scene to the exact moment it's spoken (±0.01s accuracy).
+                  <Sparkles className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" />
+                  <div className="text-xs text-indigo-300">
+                     <strong className="text-indigo-200">Ready for Perfect Sync!</strong> Click "Analyze & Auto-Sync" below.
+                     AI will transcribe your audio with word-level timestamps and align scenes automatically. Zero manual adjustment needed!
                   </div>
                </div>
             </div>

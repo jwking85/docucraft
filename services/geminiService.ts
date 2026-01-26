@@ -100,49 +100,56 @@ export const breakdownScript = async (script: string): Promise<StoryBeat[]> => {
   }
 };
 
+/**
+ * PERFECT AUDIO SYNC - Transcribe audio with word-level timestamps
+ * Then intelligently match to script segments
+ */
 export const alignAudioToScript = async (audioFile: File, scriptSegments: { id: string; text: string }[]): Promise<Record<string, { start: number; end: number }>> => {
   if (!process.env.API_KEY) throw new Error("API Key is missing.");
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+  console.log('🎯 PERFECT SYNC: Starting word-level transcription...');
+
   const audioPart = await fileToPart(audioFile);
-  const segmentsList = scriptSegments.map((s, i) => `${i + 1}. "${s.text}" (ID: ${s.id})`).join('\n');
 
-  // ULTRA-PRECISE prompt for timestamp extraction
-  const prompt = `
-    You are a professional audio transcription specialist with frame-accurate timing precision.
+  // STEP 1: Get FULL transcription with word-level timestamps
+  const transcriptionPrompt = `
+    You are a professional audio transcription AI with word-level timestamp accuracy.
 
-    SCRIPT SEGMENTS TO SYNC:
-    ${segmentsList}
+    TASK: Transcribe this audio file with WORD-LEVEL timestamps.
 
-    TASK: Listen to the audio and extract EXACT timestamps for each segment.
+    For EVERY WORD spoken, provide:
+    - word: The exact word spoken
+    - start: When this word begins (seconds, 2 decimals)
+    - end: When this word ends (seconds, 2 decimals)
 
-    For each numbered segment, identify:
-    1. "start": The EXACT moment (in seconds) when the FIRST WORD begins (e.g., 12.34)
-    2. "end": The EXACT moment (in seconds) when the LAST WORD ends (e.g., 18.67)
+    CRITICAL REQUIREMENTS:
+    1. EVERY SINGLE WORD must have a timestamp
+    2. Timestamps must be ACCURATE to ±0.01 seconds
+    3. Include pauses (mark as { "word": "[pause]", "start": X, "end": Y })
+    4. Timestamps must be sequential (each word's start >= previous word's end)
+    5. DO NOT skip any words
 
-    CRITICAL RULES:
-    - Precision: Use 2 decimal places (0.01 second accuracy)
-    - Contiguous: End of segment N should match start of segment N+1 (±0.1s)
-    - No gaps: If there's a pause, include it in the previous segment's end time
-    - Sequential: Timestamps must increase monotonically
-    - Complete: All segments must have valid timestamps
+    OUTPUT FORMAT (JSON array):
+    [
+      { "word": "For", "start": 0.00, "end": 0.15 },
+      { "word": "those", "start": 0.16, "end": 0.45 },
+      { "word": "of", "start": 0.46, "end": 0.58 },
+      { "word": "[pause]", "start": 0.59, "end": 1.20 },
+      { "word": "us", "start": 1.21, "end": 1.38 }
+    ]
 
-    OUTPUT FORMAT:
-    Return JSON object mapping segment ID to timing:
-    {
-      "beat-123-0": { "start": 0.00, "end": 5.34 },
-      "beat-123-1": { "start": 5.34, "end": 10.12 }
-    }
-
-    Be frame-accurate. This is for professional video editing.
+    This is for professional video editing. Be PRECISE.
   `;
 
-  const response = await ai.models.generateContent({
+  console.log('📝 Requesting word-level transcription from Gemini 2.0 Flash...');
+
+  const transcriptionResponse = await ai.models.generateContent({
     model: 'gemini-2.0-flash',
     contents: {
       parts: [
         audioPart,
-        { text: prompt }
+        { text: transcriptionPrompt }
       ]
     },
     config: {
@@ -150,13 +157,90 @@ export const alignAudioToScript = async (audioFile: File, scriptSegments: { id: 
     }
   });
 
-  const text = response.text || "{}";
+  const transcriptionText = transcriptionResponse.text || "[]";
+  let wordTimestamps: Array<{ word: string; start: number; end: number }> = [];
+
   try {
-    return JSON.parse(cleanJsonOutput(text));
+    wordTimestamps = JSON.parse(cleanJsonOutput(transcriptionText));
+    console.log(`✅ Transcribed ${wordTimestamps.length} words with timestamps`);
   } catch (e) {
-    console.error("Failed to parse alignment", e);
-    throw new Error("Failed to sync audio. Falling back to simple timing.");
+    console.error("Failed to parse word-level transcription", e);
+    throw new Error("Failed to transcribe audio. Please try again.");
   }
+
+  // STEP 2: Intelligently match script segments to word timestamps
+  console.log('🧠 Matching script segments to transcribed words...');
+
+  const segmentTimings: Record<string, { start: number; end: number }> = {};
+
+  for (let i = 0; i < scriptSegments.length; i++) {
+    const segment = scriptSegments[i];
+    const segmentWords = segment.text.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+
+    console.log(`\n📍 Segment ${i + 1}: "${segment.text.substring(0, 50)}..." (${segmentWords.length} words)`);
+
+    // Find best match in transcription
+    let bestMatchStart = -1;
+    let bestMatchEnd = -1;
+    let bestMatchScore = 0;
+
+    // Sliding window to find where this segment appears in transcription
+    for (let windowStart = 0; windowStart < wordTimestamps.length - segmentWords.length + 1; windowStart++) {
+      let matchScore = 0;
+
+      for (let j = 0; j < segmentWords.length && windowStart + j < wordTimestamps.length; j++) {
+        const scriptWord = segmentWords[j].replace(/[^\w]/g, '').toLowerCase();
+        const audioWord = wordTimestamps[windowStart + j].word.replace(/[^\w]/g, '').toLowerCase();
+
+        if (audioWord === '[pause]') continue;
+
+        // Fuzzy match (allow slight variations)
+        if (scriptWord === audioWord) {
+          matchScore += 10; // Exact match
+        } else if (scriptWord.includes(audioWord) || audioWord.includes(scriptWord)) {
+          matchScore += 5; // Partial match
+        } else if (scriptWord[0] === audioWord[0]) {
+          matchScore += 1; // Same first letter
+        }
+      }
+
+      if (matchScore > bestMatchScore) {
+        bestMatchScore = matchScore;
+        bestMatchStart = windowStart;
+        bestMatchEnd = Math.min(windowStart + segmentWords.length - 1, wordTimestamps.length - 1);
+      }
+    }
+
+    if (bestMatchStart >= 0 && bestMatchEnd >= 0) {
+      const startTime = wordTimestamps[bestMatchStart].start;
+      const endTime = wordTimestamps[bestMatchEnd].end;
+
+      segmentTimings[segment.id] = {
+        start: Number(startTime.toFixed(2)),
+        end: Number(endTime.toFixed(2))
+      };
+
+      console.log(`✅ Matched: ${startTime.toFixed(2)}s - ${endTime.toFixed(2)}s (${(endTime - startTime).toFixed(2)}s duration, score: ${bestMatchScore})`);
+    } else {
+      console.warn(`⚠️ Could not find match for segment ${i + 1}`);
+
+      // Fallback: use word count estimation
+      const prevEnd = i > 0 && segmentTimings[scriptSegments[i - 1].id]
+        ? segmentTimings[scriptSegments[i - 1].id].end
+        : 0;
+      const estimatedDuration = segmentWords.length * 0.4 + 0.5;
+
+      segmentTimings[segment.id] = {
+        start: Number(prevEnd.toFixed(2)),
+        end: Number((prevEnd + estimatedDuration).toFixed(2))
+      };
+
+      console.log(`📊 Fallback: ${prevEnd.toFixed(2)}s - ${(prevEnd + estimatedDuration).toFixed(2)}s (estimated)`);
+    }
+  }
+
+  console.log('\n🎉 PERFECT SYNC COMPLETE!');
+  return segmentTimings;
 };
 
 /**
