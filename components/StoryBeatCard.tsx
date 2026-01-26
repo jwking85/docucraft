@@ -33,32 +33,23 @@ const StoryBeatCard: React.FC<StoryBeatCardProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const stopTimerRef = useRef<number | null>(null);
 
-  // Local state for inputs to allow smooth typing
-  const [localStart, setLocalStart] = useState(beat.startTime?.toString() || "0");
-  const [localEnd, setLocalEnd] = useState(beat.endTime?.toString() || "5");
-  const lastCommittedRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+  // SIMPLE: Always display current beat values (no stale state!)
+  const displayStart = beat.startTime !== undefined ? beat.startTime.toFixed(2) : "0.00";
+  const displayEnd = beat.endTime !== undefined ? beat.endTime.toFixed(2) : (beat.suggested_duration || 5).toFixed(2);
 
-  // Sync local state with props when they change externally (e.g. from Auto-Distribute)
-  useEffect(() => {
-    if (beat.startTime !== undefined) setLocalStart(beat.startTime.toFixed(2));
-    if (beat.endTime !== undefined) setLocalEnd(beat.endTime.toFixed(2));
-  }, [beat.startTime, beat.endTime]);
+  const handleStartChange = (value: string) => {
+      const newStart = parseFloat(value);
+      const currentEnd = beat.endTime !== undefined ? beat.endTime : parseFloat(displayEnd);
+      if (!isNaN(newStart) && !isNaN(currentEnd)) {
+          onTimingChange(beat.id, newStart, currentEnd);
+      }
+  };
 
-  const handleTimingBlur = () => {
-      const s = parseFloat(localStart);
-      const e = parseFloat(localEnd);
-
-      // Prevent duplicate calls with same values
-      if (!isNaN(s) && !isNaN(e)) {
-          const last = lastCommittedRef.current;
-          if (Math.abs(s - last.start) < 0.01 && Math.abs(e - last.end) < 0.01) {
-              console.log(`⏭️  Skipping duplicate timing change for ${beat.id}`);
-              return;
-          }
-
-          console.log(`📤 Committing timing change: ${s.toFixed(2)}s - ${e.toFixed(2)}s`);
-          lastCommittedRef.current = { start: s, end: e };
-          onTimingChange(beat.id, s, e);
+  const handleEndChange = (value: string) => {
+      const currentStart = beat.startTime !== undefined ? beat.startTime : parseFloat(displayStart);
+      const newEnd = parseFloat(value);
+      if (!isNaN(currentStart) && !isNaN(newEnd)) {
+          onTimingChange(beat.id, currentStart, newEnd);
       }
   };
 
@@ -158,22 +149,20 @@ const StoryBeatCard: React.FC<StoryBeatCardProps> = ({
                   <div className="px-1.5 py-0.5 border-r border-slate-700 bg-slate-800/50">
                      <Clock className="w-3 h-3 text-indigo-400" />
                   </div>
-                  <input 
-                     type="number" 
-                     step="0.1" 
-                     className="w-12 bg-transparent text-[10px] font-mono text-white outline-none text-center focus:bg-indigo-500/20 py-1" 
-                     value={localStart}
-                     onChange={(e) => setLocalStart(e.target.value)}
-                     onBlur={handleTimingBlur}
+                  <input
+                     type="number"
+                     step="0.1"
+                     className="w-12 bg-transparent text-[10px] font-mono text-white outline-none text-center focus:bg-indigo-500/20 py-1"
+                     value={displayStart}
+                     onChange={(e) => handleStartChange(e.target.value)}
                   />
                   <div className="text-[10px] text-slate-600 font-mono">-</div>
-                  <input 
-                     type="number" 
-                     step="0.1" 
-                     className="w-12 bg-transparent text-[10px] font-mono text-white outline-none text-center focus:bg-indigo-500/20 py-1" 
-                     value={localEnd}
-                     onChange={(e) => setLocalEnd(e.target.value)}
-                     onBlur={handleTimingBlur}
+                  <input
+                     type="number"
+                     step="0.1"
+                     className="w-12 bg-transparent text-[10px] font-mono text-white outline-none text-center focus:bg-indigo-500/20 py-1"
+                     value={displayEnd}
+                     onChange={(e) => handleEndChange(e.target.value)}
                   />
                </div>
             ) : (
