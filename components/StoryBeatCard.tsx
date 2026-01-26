@@ -37,19 +37,29 @@ const StoryBeatCard: React.FC<StoryBeatCardProps> = ({
   const displayStart = beat.startTime !== undefined ? beat.startTime.toFixed(2) : "0.00";
   const displayEnd = beat.endTime !== undefined ? beat.endTime.toFixed(2) : (beat.suggested_duration || 5).toFixed(2);
 
-  const handleStartChange = (value: string) => {
-      const newStart = parseFloat(value);
-      const currentEnd = beat.endTime !== undefined ? beat.endTime : parseFloat(displayEnd);
-      if (!isNaN(newStart) && !isNaN(currentEnd)) {
-          onTimingChange(beat.id, newStart, currentEnd);
+  // Local editing state (for smooth typing without triggering cascade on every keystroke)
+  const [editingStart, setEditingStart] = useState<string | null>(null);
+  const [editingEnd, setEditingEnd] = useState<string | null>(null);
+
+  const handleStartBlur = () => {
+      if (editingStart !== null) {
+          const newStart = parseFloat(editingStart);
+          const currentEnd = beat.endTime !== undefined ? beat.endTime : parseFloat(displayEnd);
+          if (!isNaN(newStart) && !isNaN(currentEnd)) {
+              onTimingChange(beat.id, newStart, currentEnd);
+          }
+          setEditingStart(null);
       }
   };
 
-  const handleEndChange = (value: string) => {
-      const currentStart = beat.startTime !== undefined ? beat.startTime : parseFloat(displayStart);
-      const newEnd = parseFloat(value);
-      if (!isNaN(currentStart) && !isNaN(newEnd)) {
-          onTimingChange(beat.id, currentStart, newEnd);
+  const handleEndBlur = () => {
+      if (editingEnd !== null) {
+          const currentStart = beat.startTime !== undefined ? beat.startTime : parseFloat(displayStart);
+          const newEnd = parseFloat(editingEnd);
+          if (!isNaN(currentStart) && !isNaN(newEnd)) {
+              onTimingChange(beat.id, currentStart, newEnd);
+          }
+          setEditingEnd(null);
       }
   };
 
@@ -153,16 +163,18 @@ const StoryBeatCard: React.FC<StoryBeatCardProps> = ({
                      type="number"
                      step="0.1"
                      className="w-12 bg-transparent text-[10px] font-mono text-white outline-none text-center focus:bg-indigo-500/20 py-1"
-                     value={displayStart}
-                     onChange={(e) => handleStartChange(e.target.value)}
+                     value={editingStart !== null ? editingStart : displayStart}
+                     onChange={(e) => setEditingStart(e.target.value)}
+                     onBlur={handleStartBlur}
                   />
                   <div className="text-[10px] text-slate-600 font-mono">-</div>
                   <input
                      type="number"
                      step="0.1"
                      className="w-12 bg-transparent text-[10px] font-mono text-white outline-none text-center focus:bg-indigo-500/20 py-1"
-                     value={displayEnd}
-                     onChange={(e) => handleEndChange(e.target.value)}
+                     value={editingEnd !== null ? editingEnd : displayEnd}
+                     onChange={(e) => setEditingEnd(e.target.value)}
+                     onBlur={handleEndBlur}
                   />
                </div>
             ) : (
