@@ -5,7 +5,7 @@ import {
   SCRIPT_BREAKDOWN_PROMPT
 } from "../constants";
 import { ImageAnalysis, StoryBeat } from "../types";
-import { calculateSmartTimings, SceneTimingInput, SceneTimingOutput } from "./smartTiming";
+import { calculateSmartTimings, SceneTimingInput } from "./smartTiming";
 
 // Helper to convert file to Base64
 const fileToPart = async (file: File): Promise<{ inlineData: { data: string; mimeType: string } }> => {

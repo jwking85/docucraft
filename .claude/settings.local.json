@@ -21,7 +21,8 @@
       "Bash(node -e:*)",
       "Bash(cat:*)",
       "Bash(npm run timing:debug:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []
