@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertCircle, Loader2, ArrowRight, Save, Upload, Clapperboard, Lock, Unlock, KeyRound } from 'lucide-react';
+import { AlertCircle, Loader2, ArrowRight, Save, Upload, Clapperboard, Lock, Unlock, KeyRound, Settings } from 'lucide-react';
 import { ProcessedImage, AppStep, TimelineScene, ScriptType, ProjectFile } from './types';
 import StoryWorkspace from './components/StoryWorkspace';
 import TimelineView from './components/TimelineView';
 import QuickStartGuide from './components/QuickStartGuide';
+import SettingsPanel from './components/SettingsPanel';
 import { BackgroundMusicConfig } from './components/BackgroundMusicSelector';
 
 // Helpers for Base64 conversion
@@ -38,6 +39,7 @@ const App: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showQuickStart, setShowQuickStart] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const loadInputRef = useRef<HTMLInputElement>(null);
 
   // Check for stored access on mount
@@ -436,6 +438,14 @@ const App: React.FC = () => {
              </button>
 
              <button
+                onClick={() => setShowSettings(true)}
+                className="text-slate-500 hover:text-white transition-colors p-1.5 hover:bg-slate-800 rounded"
+                title="API Settings"
+             >
+                <Settings className="w-4 h-4" />
+             </button>
+
+             <button
                 onClick={handleLock}
                 className="text-slate-500 hover:text-white transition-colors p-1.5 hover:bg-slate-800 rounded"
                 title="Lock Studio (Require Password)"
@@ -452,6 +462,13 @@ const App: React.FC = () => {
             setShowQuickStart(false);
             localStorage.setItem("docucraft_seen_guide", "true");
           }}
+        />
+      )}
+
+      {/* Settings Panel */}
+      {showSettings && (
+        <SettingsPanel
+          onClose={() => setShowSettings(false)}
         />
       )}
 
