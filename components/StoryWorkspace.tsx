@@ -366,16 +366,29 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
   };
 
   const handleTimingChange = (beatId: string, newStart: number, newEnd: number) => {
+      console.log(`\n🎬 TIMING CHANGE TRIGGERED for beat: ${beatId}`);
+      console.log(`   New values: ${newStart.toFixed(2)}s → ${newEnd.toFixed(2)}s`);
+
       setBeats(prev => {
           const index = prev.findIndex(b => b.id === beatId);
-          if (index === -1) return prev;
+          if (index === -1) {
+              console.error(`❌ Beat not found: ${beatId}`);
+              return prev;
+          }
 
-          console.log(`⚙️ Timing changed for scene ${index + 1}: ${newStart.toFixed(2)}s - ${newEnd.toFixed(2)}s`);
+          console.log(`   Scene index: ${index + 1} of ${prev.length}`);
 
           const newBeats = [...prev];
+          const oldBeat = newBeats[index];
+
+          // Calculate old end time
+          const oldStart = oldBeat.startTime !== undefined ? oldBeat.startTime : 0;
+          const oldEnd = oldBeat.endTime !== undefined ? oldBeat.endTime : (oldStart + (oldBeat.suggested_duration || 5));
+
+          console.log(`   OLD timing: ${oldStart.toFixed(2)}s → ${oldEnd.toFixed(2)}s`);
+          console.log(`   NEW timing: ${newStart.toFixed(2)}s → ${newEnd.toFixed(2)}s`);
 
           // Update the changed scene
-          const oldEnd = newBeats[index].endTime || newBeats[index].suggested_duration || 5;
           newBeats[index] = {
               ...newBeats[index],
               startTime: newStart,
@@ -383,28 +396,40 @@ const StoryWorkspace: React.FC<StoryWorkspaceProps> = ({ onComplete, images, set
               suggested_duration: Number((newEnd - newStart).toFixed(2))
           };
 
-          // AUTOMATIC ADJUSTMENT: Shift all following scenes
+          // AUTOMATIC CASCADE: Shift all following scenes
           const timeShift = newEnd - oldEnd;
+          console.log(`   Time shift needed: ${timeShift.toFixed(2)}s`);
 
           if (Math.abs(timeShift) > 0.01 && index < newBeats.length - 1) {
-              console.log(`🔄 Shifting ${newBeats.length - index - 1} following scenes by ${timeShift.toFixed(2)}s`);
+              console.log(`\n🔄 CASCADE: Shifting ${newBeats.length - index - 1} scenes by ${timeShift.toFixed(2)}s`);
 
               for (let i = index + 1; i < newBeats.length; i++) {
-                  const currentStart = newBeats[i].startTime || 0;
-                  const currentEnd = newBeats[i].endTime || (currentStart + (newBeats[i].suggested_duration || 5));
+                  const oldSceneStart = newBeats[i].startTime !== undefined ? newBeats[i].startTime : 0;
+                  const oldSceneEnd = newBeats[i].endTime !== undefined ? newBeats[i].endTime : (oldSceneStart + (newBeats[i].suggested_duration || 5));
+
+                  const newSceneStart = oldSceneStart + timeShift;
+                  const newSceneEnd = oldSceneEnd + timeShift;
+
+                  console.log(`   Scene ${i + 1}: ${oldSceneStart.toFixed(2)}→${oldSceneEnd.toFixed(2)}s  →  ${newSceneStart.toFixed(2)}→${newSceneEnd.toFixed(2)}s`);
 
                   newBeats[i] = {
                       ...newBeats[i],
-                      startTime: Number((currentStart + timeShift).toFixed(2)),
-                      endTime: Number((currentEnd + timeShift).toFixed(2)),
+                      startTime: Number(newSceneStart.toFixed(2)),
+                      endTime: Number(newSceneEnd.toFixed(2)),
                       suggested_duration: newBeats[i].suggested_duration
                   };
-
-                  console.log(`  Scene ${i + 1}: ${newBeats[i].startTime}s - ${newBeats[i].endTime}s`);
               }
 
-              console.log('✅ All following scenes adjusted automatically!');
+              console.log('✅ CASCADE COMPLETE!');
+          } else {
+              console.log(`⏭️  No cascade needed (shift: ${timeShift.toFixed(2)}s, has next: ${index < newBeats.length - 1})`);
           }
+
+          console.log('\n📊 FINAL STATE:');
+          newBeats.slice(Math.max(0, index - 1), Math.min(newBeats.length, index + 3)).forEach((b, i) => {
+              const actualIndex = Math.max(0, index - 1) + i;
+              console.log(`   Scene ${actualIndex + 1}: ${(b.startTime || 0).toFixed(2)}s → ${(b.endTime || 0).toFixed(2)}s`);
+          });
 
           return newBeats;
       });
