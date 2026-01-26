@@ -28,6 +28,7 @@ export interface SceneTimingOutput {
   startTime: number;
   endTime: number;
   durationSec: number;
+  text: string; // Preserve the actual text (important for split scenes)
 
   // Debug metadata
   reason: 'narration' | 'estimate' | 'clamp' | 'min' | 'max' | 'split' | 'merged';
@@ -138,6 +139,7 @@ function applyAudioTiming(scene: SceneTimingInput, config: TimingConfig): SceneT
       startTime: scene.audioStart,
       endTime: scene.audioEnd,
       durationSec: Number(duration.toFixed(2)),
+      text: scene.text,
       reason: 'narration',
       debugMeta: {
         wordCount,
@@ -186,6 +188,7 @@ function estimateAndClampDuration(scene: SceneTimingInput, config: TimingConfig)
     startTime: 0, // Will be set during sequencing
     endTime: 0,   // Will be set during sequencing
     durationSec: Number(finalDuration.toFixed(2)),
+    text: scene.text,
     reason,
     debugMeta: {
       wordCount,
@@ -284,6 +287,7 @@ function mergeShortScenes(
         startTime: 0, // Will be set during sequencing
         endTime: 0,
         durationSec: Number(mergedDuration.toFixed(2)),
+        text: mergedTexts,
         reason: 'merged',
         debugMeta: {
           wordCount: mergedWordCount,
@@ -315,6 +319,7 @@ function applyDeadAirLimit(scene: SceneTimingInput, timing: SceneTimingOutput, c
     return {
       ...timing,
       durationSec: config.maxDeadAir,
+      text: scene.text,
       reason: 'clamp',
       debugMeta: {
         ...timing.debugMeta,

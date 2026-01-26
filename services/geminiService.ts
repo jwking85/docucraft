@@ -66,9 +66,18 @@ export const breakdownScript = async (script: string): Promise<StoryBeat[]> => {
   try {
     const json = JSON.parse(cleanJsonOutput(text));
 
+    // Create a map of original AI data keyed by beat ID
+    const baseTime = Date.now();
+    const originalDataMap = new Map();
+
+    json.forEach((item: any, idx: number) => {
+      const id = `beat-${baseTime}-${idx}`;
+      originalDataMap.set(id, item);
+    });
+
     // SMARTTIMING INTEGRATION: Convert AI response to SceneTimingInput format
     const sceneInputs: SceneTimingInput[] = json.map((item: any, idx: number) => ({
-      id: `beat-${Date.now()}-${idx}`,
+      id: `beat-${baseTime}-${idx}`,
       text: item.script_text || '',
       sceneType: 'narration' as const,
     }));
@@ -77,14 +86,24 @@ export const breakdownScript = async (script: string): Promise<StoryBeat[]> => {
     const timings = calculateSmartTimings(sceneInputs);
 
     // Convert back to StoryBeat format with timing metadata
-    return timings.map((timing, idx) => {
-      const originalItem = json[idx];
-      const suggestedMotion = originalItem.motion || suggestMotionForScene(originalItem.visual_prompt, originalItem.script_text);
+    return timings.map((timing) => {
+      // Handle split/merged scenes: extract base ID from "beat-123-0-part1" → "beat-123-0"
+      const baseId = timing.id.replace(/-part\d+$/, '').replace(/-merged$/, '');
+      const originalItem = originalDataMap.get(baseId) || originalDataMap.get(timing.id);
+
+      if (!originalItem) {
+        console.warn(`⚠️ No original data found for ${timing.id}, using defaults`);
+      }
+
+      // Use the actual text from timing (important for split scenes!)
+      const scriptText = timing.text || originalItem?.script_text || '';
+      const visualPrompt = originalItem?.visual_prompt || 'Documentary scene';
+      const suggestedMotion = originalItem?.motion || suggestMotionForScene(visualPrompt, scriptText);
 
       return {
         id: timing.id,
-        script_text: originalItem.script_text,
-        visual_prompt: originalItem.visual_prompt,
+        script_text: scriptText,
+        visual_prompt: visualPrompt,
         suggested_duration: timing.durationSec,
         startTime: timing.startTime,
         endTime: timing.endTime,
