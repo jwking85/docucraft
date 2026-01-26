@@ -64,10 +64,8 @@ const StoryBeatCard: React.FC<StoryBeatCardProps> = ({
   };
 
   const getValidTimes = () => {
-      const s = parseFloat(localStart);
-      const e = parseFloat(localEnd);
-      const validStart = !isNaN(s) ? s : (beat.startTime || 0);
-      const validEnd = !isNaN(e) ? e : (beat.endTime || validStart + 5);
+      const validStart = beat.startTime !== undefined ? beat.startTime : 0;
+      const validEnd = beat.endTime !== undefined ? beat.endTime : (validStart + (beat.suggested_duration || 5));
       return { start: validStart, end: validEnd, duration: Math.max(0.5, validEnd - validStart) };
   };
 
