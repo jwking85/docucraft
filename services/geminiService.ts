@@ -167,10 +167,17 @@ export const alignAudioToScript = async (audioFile: File, scriptSegments: { id: 
 
     // Validate and fix any issues
     let lastEnd = 0;
-    for (const segment of scriptSegments) {
+    for (let i = 0; i < scriptSegments.length; i++) {
+      const segment = scriptSegments[i];
       const timing = segmentTimings[segment.id];
 
       if (timing && timing.start !== undefined && timing.end !== undefined) {
+        // FORCE FIRST SCENE TO START AT 0.00
+        if (i === 0) {
+          timing.start = 0.00;
+          console.log(`🎬 FORCED Scene 1 to start at 0.00s (AI detected ${timing.start}s)`);
+        }
+
         // Ensure sequential
         if (timing.start < lastEnd) {
           timing.start = lastEnd;
