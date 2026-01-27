@@ -55,9 +55,9 @@ interface TimingConfig {
 
 const DEFAULT_CONFIG: TimingConfig = {
   wpm: 155,
-  minDuration: 1.8,
-  maxDuration: 7.0,
-  minTitleDuration: 1.0,
+  minDuration: 3.0,      // Raised from 1.8s - scenes too short are jarring
+  maxDuration: 12.0,     // Raised from 7.0s - was splitting too aggressively
+  minTitleDuration: 1.5, // Raised from 1.0s - titles need time to read
   shortSceneThreshold: 2.2,
   mergeMinConsecutive: 3,
   maxDeadAir: 2.0,
@@ -202,53 +202,17 @@ function estimateAndClampDuration(scene: SceneTimingInput, config: TimingConfig)
 
 /**
  * RULE D: Auto-split scenes exceeding max duration
+ * DISABLED: Auto-split was too aggressive, creating too many scenes.
+ * Instead, we rely on clamping to max duration.
  */
 function autoSplitLongScenes(
   scenes: SceneTimingInput[],
   config: TimingConfig
 ): SceneTimingInput[] {
-  const result: SceneTimingInput[] = [];
-
-  for (const scene of scenes) {
-    // Skip if has audio timing (trust AI)
-    if (scene.audioStart !== undefined && scene.audioEnd !== undefined) {
-      result.push(scene);
-      continue;
-    }
-
-    const estimatedDuration = calculateBaseDuration(scene.text, config);
-
-    if (estimatedDuration > config.maxDuration) {
-      // Try to split at natural breakpoint
-      const splitPoint = findSplitPoint(scene.text);
-
-      if (splitPoint) {
-        const firstPart = scene.text.substring(0, splitPoint).trim();
-        const secondPart = scene.text.substring(splitPoint).trim();
-
-        result.push({
-          ...scene,
-          id: `${scene.id}-part1`,
-          text: firstPart,
-        });
-
-        result.push({
-          ...scene,
-          id: `${scene.id}-part2`,
-          text: secondPart,
-        });
-
-        console.log(`🔪 Auto-split scene "${scene.text.substring(0, 30)}..." (${estimatedDuration.toFixed(1)}s > ${config.maxDuration}s)`);
-      } else {
-        // Can't split naturally, just keep as-is (will be clamped)
-        result.push(scene);
-      }
-    } else {
-      result.push(scene);
-    }
-  }
-
-  return result;
+  // DISABLED: Just return scenes as-is
+  // The AI already does a good job of scene breakdown
+  // Clamping to maxDuration handles any edge cases
+  return scenes;
 }
 
 /**

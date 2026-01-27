@@ -43,10 +43,10 @@ const nickelodeonScenes = [
   },
 ];
 
-// Simulate SmartTiming calculations
+// Simulate SmartTiming calculations (NEW SETTINGS)
 const WPM = 155;
-const MIN_DURATION = 1.8;
-const MAX_DURATION = 7.0;
+const MIN_DURATION = 3.0;  // Raised from 1.8s - better pacing
+const MAX_DURATION = 12.0; // Raised from 7.0s - less aggressive clamping
 
 function countWords(text) {
   return text.trim().split(/\s+/).filter(w => w.length > 0).length;
@@ -106,7 +106,7 @@ console.log('\n═════════════════════�
 console.log('        NICKELODEON SCRIPT - TIMING TEST (AFTER)          ');
 console.log('═══════════════════════════════════════════════════════════\n');
 
-console.log('NEW SYSTEM (Punctuation-based padding, 1.8-7.0s clamp):');
+console.log('NEW SYSTEM (Punctuation-based padding, 3.0-12.0s clamp):');
 console.log('─'.repeat(100));
 console.log('Scene'.padEnd(10) + 'Words'.padEnd(8) + 'Base'.padEnd(10) + 'Padding'.padEnd(10) + 'Duration'.padEnd(12) + 'Reason'.padEnd(12) + 'Text');
 console.log('─'.repeat(100));
